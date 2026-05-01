@@ -86,6 +86,7 @@ export default function AdminPage() {
       setSubmissions((prev) =>
         prev.map((s) => s.id === id ? { ...s, sent_at: new Date().toISOString() } : s)
       )
+      setStatusFilter("sent")
     }
     setSending(null)
   }
