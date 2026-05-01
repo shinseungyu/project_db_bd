@@ -17,11 +17,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (adminMode) {
-    const { data } = await supabaseAdmin
+    const testOnly = req.nextUrl.searchParams.get("test") === "1"
+    let query = supabaseAdmin
       .from("submissions")
       .select("*, sites(name)")
       .order("created_at", { ascending: false })
       .limit(500)
+    if (testOnly) query = query.eq("name", "테스트")
+    const { data } = await query
     return NextResponse.json(data ?? [])
   }
 

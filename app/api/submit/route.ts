@@ -2,16 +2,44 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
 export async function POST(req: NextRequest) {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  }
+
   const apiKey = req.nextUrl.searchParams.get("api_key")
-  if (!apiKey) return NextResponse.json({ error: "api_key required" }, { status: 401 })
+  if (!apiKey) return NextResponse.json({ error: "api_key required" }, { status: 401, headers: corsHeaders })
 
-  const { data: site } = await supabaseAdmin
-    .from("sites")
-    .select("id")
-    .eq("api_key", apiKey)
-    .single()
+  let siteId: string
 
-  if (!site) return NextResponse.json({ error: "invalid api_key" }, { status: 401 })
+  if (apiKey === process.env.TEST_API_KEY) {
+    // 테스트 사이트 자동 생성/조회
+    const { data: existing } = await supabaseAdmin
+      .from("sites")
+      .select("id")
+      .eq("name", "__test_nail16__")
+      .single()
+    if (existing) {
+      siteId = existing.id
+    } else {
+      const { data: created } = await supabaseAdmin
+        .from("sites")
+        .insert({ name: "__test_nail16__", api_key: apiKey, owner_email: "" })
+        .select("id")
+        .single()
+      if (!created) return NextResponse.json({ error: "test site init failed" }, { status: 500, headers: corsHeaders })
+      siteId = created.id
+    }
+  } else {
+    const { data: site } = await supabaseAdmin
+      .from("sites")
+      .select("id")
+      .eq("api_key", apiKey)
+      .single()
+    if (!site) return NextResponse.json({ error: "invalid api_key" }, { status: 401, headers: corsHeaders })
+    siteId = site.id
+  }
 
   let body: Record<string, string> = {}
   const ct = req.headers.get("content-type") ?? ""
@@ -35,7 +63,7 @@ export async function POST(req: NextRequest) {
       : body.mobile1 ?? "")
 
   const submission = {
-    site_id: site.id,
+    site_id: siteId,
     name: body.customer_name ?? body.name ?? "",
     birthday,
     cellphone,
@@ -56,9 +84,9 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
 
-  return NextResponse.json({ ok: true, id: data.id })
+  return NextResponse.json({ ok: true, id: data.id }, { headers: corsHeaders })
 }
 
 // CORS - 외부 사이트에서 POST 가능하도록
