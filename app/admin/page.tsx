@@ -39,6 +39,7 @@ export default function AdminPage() {
   const [newSite, setNewSite] = useState({ name: "", owner_email: "" })
   const [filter, setFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "sent">("all")
+  const [dateFilter, setDateFilter] = useState<string>("all")
   const [sending, setSending] = useState<string | null>(null)
 
   const headers = { "x-admin-id": adminId, "x-admin-password": password }
@@ -134,10 +135,14 @@ export default function AdminPage() {
   const pendingCount = submissions.filter((s) => !s.sent_at).length
   const sentCount = submissions.filter((s) => !!s.sent_at).length
 
+  const toDateKey = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
+  const uniqueDates = ["all", ...Array.from(new Set(submissions.map((s) => toDateKey(s.created_at))))]
+
   const filtered = submissions.filter((s) => {
     const matchText = !filter || s.name?.includes(filter) || s.cellphone?.includes(filter) || s.sites?.name?.includes(filter)
     const matchStatus = statusFilter === "all" || (statusFilter === "pending" && !s.sent_at) || (statusFilter === "sent" && !!s.sent_at)
-    return matchText && matchStatus
+    const matchDate = dateFilter === "all" || toDateKey(s.created_at) === dateFilter
+    return matchText && matchStatus && matchDate
   })
 
   return (
@@ -147,6 +152,7 @@ export default function AdminPage() {
         <div className="flex gap-2">
           <span className="text-sm bg-yellow-50 text-yellow-700 border border-yellow-200 px-3 py-1.5 rounded-lg font-semibold">미전송 {pendingCount}건</span>
           <span className="text-sm bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-semibold">전송완료 {sentCount}건</span>
+          <a href="/" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 메인</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
         </div>
@@ -163,6 +169,19 @@ export default function AdminPage() {
 
       {tab === "submissions" && (
         <>
+          {/* 날짜 필터 */}
+          <div className="flex gap-2 flex-wrap mb-4">
+            {uniqueDates.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDateFilter(d)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${dateFilter === d ? "bg-gray-900 text-white border-gray-900" : "bg-white border-gray-200 text-gray-500 hover:border-gray-400"}`}
+              >
+                {d === "all" ? "전체" : d}
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"

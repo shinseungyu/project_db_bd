@@ -71,9 +71,10 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-800">{data.site.name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">총 {data.submissions.length}건 수신</p>
         </div>
-        <button onClick={() => setData(null)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">
-          로그아웃
-        </button>
+        <div className="flex gap-2">
+          <a href="/" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 메인</a>
+          <button onClick={() => setData(null)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">로그아웃</button>
+        </div>
       </div>
 
       <input
