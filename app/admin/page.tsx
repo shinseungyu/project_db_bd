@@ -147,6 +147,7 @@ export default function AdminPage() {
         <div className="flex gap-2">
           <span className="text-sm bg-yellow-50 text-yellow-700 border border-yellow-200 px-3 py-1.5 rounded-lg font-semibold">미전송 {pendingCount}건</span>
           <span className="text-sm bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-semibold">전송완료 {sentCount}건</span>
+          <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
         </div>
       </div>

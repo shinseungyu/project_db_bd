@@ -92,9 +92,10 @@ export default function TestDashboardPage() {
           <h1 className="text-2xl font-bold text-gray-800">테스트 대시보드</h1>
           <p className="text-sm text-gray-400 mt-1">이름 = &quot;테스트&quot; 인 데이터 ({submissions.length}건)</p>
         </div>
-        <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">
-          새로고침
-        </button>
+        <div className="flex gap-2">
+          <a href="/admin" className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700">관리자 대시보드</a>
+          <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border overflow-x-auto">
