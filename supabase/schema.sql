@@ -18,6 +18,10 @@ create table if not exists submissions (
   ipaddress text,
   useragent text,
   location text,
+  region text,
+  has_license text,
+  category text,
+  purpose text,
   raw_data jsonb,
   created_at timestamptz default now(),
   sent_at timestamptz default null  -- null이면 클라이언트에게 미전송 상태

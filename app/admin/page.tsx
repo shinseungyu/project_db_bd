@@ -10,6 +10,10 @@ type Submission = {
   sex: string
   ipaddress: string
   location: string
+  region: string
+  has_license: string
+  category: string
+  purpose: string
   created_at: string
   sent_at: string | null
   sites?: { name: string }
@@ -24,6 +28,7 @@ type Site = {
 }
 
 export default function AdminPage() {
+  const [adminId, setAdminId] = useState("")
   const [password, setPassword] = useState("")
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState("")
@@ -36,15 +41,15 @@ export default function AdminPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "sent">("all")
   const [sending, setSending] = useState<string | null>(null)
 
-  const headers = { "x-admin-password": password }
+  const headers = { "x-admin-id": adminId, "x-admin-password": password }
 
-  const load = useCallback(async (pw: string) => {
+  const load = useCallback(async (id: string, pw: string) => {
     setLoading(true)
     const [s, st] = await Promise.all([
-      fetch("/api/submissions", { headers: { "x-admin-password": pw } }),
-      fetch("/api/sites", { headers: { "x-admin-password": pw } }),
+      fetch("/api/submissions", { headers: { "x-admin-id": id, "x-admin-password": pw } }),
+      fetch("/api/sites", { headers: { "x-admin-id": id, "x-admin-password": pw } }),
     ])
-    if (s.status === 401) { setAuthError("비밀번호가 틀렸습니다."); setLoading(false); return }
+    if (s.status === 401) { setAuthError("아이디 또는 비밀번호가 틀렸습니다."); setLoading(false); return }
     setSubmissions(await s.json())
     setSites(await st.json())
     setAuthed(true)
@@ -54,7 +59,7 @@ export default function AdminPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError("")
-    load(password)
+    load(adminId, password)
   }
 
   const sendSubmission = async (id: string) => {
@@ -104,8 +109,15 @@ export default function AdminPage() {
         <form onSubmit={handleLogin} className="bg-white rounded-2xl shadow p-10 w-full max-w-sm space-y-4">
           <h1 className="text-xl font-bold text-gray-800">관리자 로그인</h1>
           <input
+            type="text"
+            placeholder="아이디"
+            value={adminId}
+            onChange={(e) => setAdminId(e.target.value)}
+            className="w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+          />
+          <input
             type="password"
-            placeholder="관리자 비밀번호"
+            placeholder="비밀번호"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
@@ -181,6 +193,10 @@ export default function AdminPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">생년월일</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">전화번호</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">성별</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">지역</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">자격증</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">카테고리</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">목적</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">수신일시</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">액션</th>
                 </tr>
@@ -202,6 +218,10 @@ export default function AdminPage() {
                     <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
                     <td className="px-4 py-2.5">{s.cellphone || "-"}</td>
                     <td className="px-4 py-2.5 text-gray-500">{s.sex || "-"}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{s.region || "-"}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{s.has_license || "-"}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{s.category || "-"}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{s.purpose || "-"}</td>
                     <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.created_at).toLocaleString("ko-KR")}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex gap-2">

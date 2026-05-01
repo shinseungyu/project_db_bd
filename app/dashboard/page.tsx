@@ -8,8 +8,11 @@ type Submission = {
   birthday: string
   cellphone: string
   sex: string
-  ipaddress: string
   location: string
+  region: string
+  has_license: string
+  category: string
+  purpose: string
   created_at: string
 }
 
@@ -62,7 +65,7 @@ export default function DashboardPage() {
   )
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{data.site.name}</h1>
@@ -89,13 +92,16 @@ export default function DashboardPage() {
               <th className="px-4 py-3 text-left font-semibold text-gray-600">생년월일</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600">전화번호</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600">성별</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">유입경로</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-600">지역</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-600">자격증</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-600">카테고리</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-600">목적</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600">수신일시</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
             )}
             {filtered.map((s) => (
               <tr key={s.id} className="border-b hover:bg-gray-50">
@@ -103,7 +109,10 @@ export default function DashboardPage() {
                 <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
                 <td className="px-4 py-2.5">{s.cellphone || "-"}</td>
                 <td className="px-4 py-2.5 text-gray-500">{s.sex || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-400 text-xs max-w-[200px] truncate">{s.location || "-"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{s.region || "-"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{s.has_license || "-"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{s.category || "-"}</td>
+                <td className="px-4 py-2.5 text-gray-500">{s.purpose || "-"}</td>
                 <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.created_at).toLocaleString("ko-KR")}</td>
               </tr>
             ))}
@@ -111,11 +120,10 @@ export default function DashboardPage() {
         </table>
       </div>
 
-      {/* CSV 다운로드 */}
       <button
         onClick={() => {
-          const header = ["이름", "생년월일", "전화번호", "성별", "유입경로", "수신일시"]
-          const rows = filtered.map((s) => [s.name, s.birthday, s.cellphone, s.sex, s.location, new Date(s.created_at).toLocaleString("ko-KR")])
+          const header = ["이름", "생년월일", "전화번호", "성별", "지역", "자격증", "카테고리", "목적", "수신일시"]
+          const rows = filtered.map((s) => [s.name, s.birthday, s.cellphone, s.sex, s.region, s.has_license, s.category, s.purpose, new Date(s.created_at).toLocaleString("ko-KR")])
           const csv = [header, ...rows].map((r) => r.map((c) => `"${(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")
           const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" })
           const url = URL.createObjectURL(blob)

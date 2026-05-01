@@ -43,6 +43,10 @@ export async function POST(req: NextRequest) {
     ipaddress: req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "",
     useragent: req.headers.get("user-agent") ?? "",
     location: body.location ?? req.headers.get("referer") ?? "",
+    region: body.region ?? "",
+    has_license: body.has_license ?? "",
+    category: body.category ?? "",
+    purpose: body.purpose ?? "",
     raw_data: body,
   }
 

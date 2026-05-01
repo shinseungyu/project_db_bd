@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
 function isAdmin(req: NextRequest) {
-  return req.headers.get("x-admin-password") === process.env.ADMIN_PASSWORD
+  return (
+    req.headers.get("x-admin-id") === process.env.ADMIN_ID &&
+    req.headers.get("x-admin-password") === process.env.ADMIN_PASSWORD
+  )
 }
 
 export async function GET(req: NextRequest) {
