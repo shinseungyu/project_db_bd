@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 
 type Submission = {
   id: string
@@ -54,8 +54,20 @@ export default function AdminPage() {
     setSubmissions(await s.json())
     setSites(await st.json())
     setAuthed(true)
+    localStorage.setItem("admin_id", id)
+    localStorage.setItem("admin_pw", pw)
     setLoading(false)
   }, [])
+
+  useEffect(() => {
+    const id = localStorage.getItem("admin_id")
+    const pw = localStorage.getItem("admin_pw")
+    if (id && pw) {
+      setAdminId(id)
+      setPassword(pw)
+      load(id, pw)
+    }
+  }, [load])
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -153,6 +165,7 @@ export default function AdminPage() {
           <span className="text-sm bg-yellow-50 text-yellow-700 border border-yellow-200 px-3 py-1.5 rounded-lg font-semibold">미전송 {pendingCount}건</span>
           <span className="text-sm bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-semibold">전송완료 {sentCount}건</span>
           <a href="/" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 메인</a>
+          <a href="/dashboard" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">클라이언트 대시보드</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
         </div>
@@ -170,16 +183,16 @@ export default function AdminPage() {
       {tab === "submissions" && (
         <>
           {/* 날짜 필터 */}
-          <div className="flex gap-2 flex-wrap mb-4">
-            {uniqueDates.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDateFilter(d)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${dateFilter === d ? "bg-gray-900 text-white border-gray-900" : "bg-white border-gray-200 text-gray-500 hover:border-gray-400"}`}
-              >
-                {d === "all" ? "전체" : d}
-              </button>
-            ))}
+          <div className="mb-4">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white"
+            >
+              {uniqueDates.map((d) => (
+                <option key={d} value={d}>{d === "all" ? "전체 날짜" : d}</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">

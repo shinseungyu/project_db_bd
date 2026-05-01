@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 
 type Submission = {
   id: string
@@ -37,8 +37,20 @@ export default function TestDashboardPage() {
     }
     setSubmissions(await res.json())
     setAuthed(true)
+    localStorage.setItem("admin_id", id)
+    localStorage.setItem("admin_pw", pw)
     setLoading(false)
   }, [])
+
+  useEffect(() => {
+    const id = localStorage.getItem("admin_id")
+    const pw = localStorage.getItem("admin_pw")
+    if (id && pw) {
+      setAdminId(id)
+      setPassword(pw)
+      load(id, pw)
+    }
+  }, [load])
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
