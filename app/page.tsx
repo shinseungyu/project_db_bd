@@ -19,6 +19,12 @@ export default function Home() {
           >
             클라이언트 대시보드
           </Link>
+          <Link
+            href="/test-dashboard"
+            className="block w-full py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition"
+          >
+            테스트 대시보드
+          </Link>
         </div>
       </div>
     </div>

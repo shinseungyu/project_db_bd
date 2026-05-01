@@ -58,8 +58,8 @@ export async function POST(req: NextRequest) {
   }
 
   const cellphone = body.cellphone
-    ?? (body.mobile1 && body.mobile2 && body.mobile3
-      ? body.mobile1 + body.mobile2 + body.mobile3
+    ?? (body.mobile1 && body.mobile2
+      ? body.mobile1 + body.mobile2 + (body.mobile3 ?? "")
       : body.mobile1 ?? "")
 
   const submission = {
