@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from("submissions")
-    .select("id, name, birthday, cellphone, sex, location, sent_at, created_at")
+    .select("id, name, birthday, cellphone, sex, location, region, has_license, category, purpose, sent_at, created_at")
     .eq("site_id", site.id)
     .not("sent_at", "is", null)   // 전송된 것만
     .order("sent_at", { ascending: false })
