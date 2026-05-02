@@ -247,7 +247,13 @@ export default function AdminPage() {
                         : <span className="text-xs bg-yellow-50 text-yellow-600 border border-yellow-200 px-2 py-0.5 rounded-full">미전송</span>
                       }
                     </td>
-                    <td className="px-4 py-2.5"><span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{s.sites?.name ?? "-"}</span></td>
+                    <td className="px-4 py-2.5">
+                      {s.sites?.name
+                        ? s.sites.name.includes(".")
+                          ? <a href={`https://${s.sites.name}`} target="_blank" rel="noopener noreferrer" className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full hover:bg-blue-100 hover:underline">{s.sites.name}</a>
+                          : <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{s.sites.name}</span>
+                        : "-"}
+                    </td>
                     <td className="px-4 py-2.5 font-medium">{s.name || "-"}</td>
                     <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
                     <td className="px-4 py-2.5">{s.cellphone || "-"}</td>
