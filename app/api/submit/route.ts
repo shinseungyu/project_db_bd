@@ -11,35 +11,13 @@ export async function POST(req: NextRequest) {
   const apiKey = req.nextUrl.searchParams.get("api_key")
   if (!apiKey) return NextResponse.json({ error: "api_key required" }, { status: 401, headers: corsHeaders })
 
-  let siteId: string
-
-  if (apiKey === process.env.TEST_API_KEY) {
-    // 테스트 사이트 자동 생성/조회
-    const { data: existing } = await supabaseAdmin
-      .from("sites")
-      .select("id")
-      .eq("name", "__test_nail16__")
-      .single()
-    if (existing) {
-      siteId = existing.id
-    } else {
-      const { data: created } = await supabaseAdmin
-        .from("sites")
-        .insert({ name: "__test_nail16__", api_key: apiKey, owner_email: "" })
-        .select("id")
-        .single()
-      if (!created) return NextResponse.json({ error: "test site init failed" }, { status: 500, headers: corsHeaders })
-      siteId = created.id
-    }
-  } else {
-    const { data: site } = await supabaseAdmin
-      .from("sites")
-      .select("id")
-      .eq("api_key", apiKey)
-      .single()
-    if (!site) return NextResponse.json({ error: "invalid api_key" }, { status: 401, headers: corsHeaders })
-    siteId = site.id
-  }
+  const { data: site } = await supabaseAdmin
+    .from("sites")
+    .select("id")
+    .eq("api_key", apiKey)
+    .single()
+  if (!site) return NextResponse.json({ error: "invalid api_key" }, { status: 401, headers: corsHeaders })
+  const siteId: string = site.id
 
   let body: Record<string, string> = {}
   const ct = req.headers.get("content-type") ?? ""
