@@ -36,7 +36,7 @@ export default function AdminPage() {
   const [sites, setSites] = useState<Site[]>([])
   const [tab, setTab] = useState<"submissions" | "sites">("submissions")
   const [loading, setLoading] = useState(false)
-  const [newSite, setNewSite] = useState({ name: "", owner_email: "" })
+  const [newSite, setNewSite] = useState({ name: "", owner_email: "", api_key: "" })
   const [filter, setFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "sent">("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
@@ -93,15 +93,17 @@ export default function AdminPage() {
 
   const addSite = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload: Record<string, string> = { name: newSite.name, owner_email: newSite.owner_email }
+    if (newSite.api_key) payload.api_key = newSite.api_key
     const res = await fetch("/api/sites", {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify(newSite),
+      body: JSON.stringify(payload),
     })
     if (res.ok) {
       const site = await res.json()
       setSites((p) => [site, ...p])
-      setNewSite({ name: "", owner_email: "" })
+      setNewSite({ name: "", owner_email: "", api_key: "" })
     }
   }
 
@@ -301,6 +303,12 @@ export default function AdminPage() {
               value={newSite.owner_email}
               onChange={(e) => setNewSite((p) => ({ ...p, owner_email: e.target.value }))}
               className="flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+            <input
+              placeholder="API Key (비워두면 자동생성)"
+              value={newSite.api_key}
+              onChange={(e) => setNewSite((p) => ({ ...p, api_key: e.target.value }))}
+              className="flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 font-mono"
             />
             <button type="submit" className="px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-700">
               사이트 추가

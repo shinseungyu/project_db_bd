@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
   const body = await req.json()
+  const insertRow: Record<string, string> = { name: body.name, owner_email: body.owner_email ?? "" }
+  if (body.api_key) insertRow.api_key = body.api_key
   const { data, error } = await supabaseAdmin
     .from("sites")
-    .insert({ name: body.name, owner_email: body.owner_email })
+    .insert(insertRow)
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
