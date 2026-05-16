@@ -24,6 +24,10 @@ type Data = {
   submissions: Submission[]
 }
 
+const PAGE_SIZE = 20
+const EXCLUDED = ["신승윤", "테스트"]
+const LAST_SEEN_KEY = "dashboard_last_seen"
+
 function DashboardContent() {
   const searchParams = useSearchParams()
   const [apiKey, setApiKey] = useState("")
@@ -32,27 +36,43 @@ function DashboardContent() {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
+  const [page, setPage] = useState(1)
+  const [newCount, setNewCount] = useState(0)
+  const [lastSeen, setLastSeen] = useState<string | null>(null)
+
+  useEffect(() => {
+    const saved = localStorage.getItem(LAST_SEEN_KEY)
+    setLastSeen(saved)
+  }, [])
+
+  const loadData = (key: string) => {
+    setLoading(true)
+    fetch(`/api/submissions?api_key=${encodeURIComponent(key)}`)
+      .then(res => res.status === 401 ? null : res.json())
+      .then(d => {
+        if (!d) { setError("API Key가 올바르지 않습니다."); return }
+        setData(d)
+        const saved = localStorage.getItem(LAST_SEEN_KEY)
+        if (saved) {
+          const count = d.submissions.filter((s: Submission) =>
+            !EXCLUDED.includes(s.name) && new Date(s.created_at) > new Date(saved)
+          ).length
+          setNewCount(count)
+        }
+        localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
+      })
+      .finally(() => setLoading(false))
+  }
 
   useEffect(() => {
     const keyFromUrl = searchParams.get("api_key")
-    if (keyFromUrl) {
-      setApiKey(keyFromUrl)
-      setLoading(true)
-      fetch(`/api/submissions?api_key=${encodeURIComponent(keyFromUrl)}`)
-        .then(res => res.status === 401 ? null : res.json())
-        .then(d => { if (d) setData(d); else setError("API Key가 올바르지 않습니다.") })
-        .finally(() => setLoading(false))
-    }
+    if (keyFromUrl) { setApiKey(keyFromUrl); loadData(keyFromUrl) }
   }, [searchParams])
 
   const load = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    setLoading(true)
-    const res = await fetch(`/api/submissions?api_key=${encodeURIComponent(apiKey)}`)
-    if (res.status === 401) { setError("API Key가 올바르지 않습니다."); setLoading(false); return }
-    setData(await res.json())
-    setLoading(false)
+    loadData(apiKey)
   }
 
   if (!data) {
@@ -77,7 +97,6 @@ function DashboardContent() {
     )
   }
 
-  const EXCLUDED = ["신승윤", "테스트"]
   const toDateKey = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
   const uniqueDates = ["all", ...Array.from(new Set(data.submissions.map((s) => toDateKey(s.created_at))))]
 
@@ -88,8 +107,24 @@ function DashboardContent() {
     return matchText && matchDate
   })
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const handleFilterChange = (fn: () => void) => { fn(); setPage(1) }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* 신규 데이터 알림 */}
+      {newCount > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+          <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <p className="text-sm font-semibold text-blue-700">
+            마지막 접속 이후 신규 데이터 <span className="text-blue-900">{newCount}건</span>이 추가됐습니다.
+          </p>
+          <button onClick={() => setNewCount(0)} className="ml-auto text-xs text-blue-400 hover:text-blue-600">닫기</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{data.site.name}</h1>
@@ -106,12 +141,12 @@ function DashboardContent() {
           type="text"
           placeholder="이름, 전화번호 검색..."
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => handleFilterChange(() => setFilter(e.target.value))}
           className="flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
         />
         <select
           value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
+          onChange={(e) => handleFilterChange(() => setDateFilter(e.target.value))}
           className="border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
         >
           {uniqueDates.map((d) => (
@@ -136,10 +171,10 @@ function DashboardContent() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {paginated.length === 0 && (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
             )}
-            {filtered.map((s) => (
+            {paginated.map((s) => (
               <tr key={s.id} className="border-b hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-medium">{s.name || "-"}</td>
                 <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
@@ -155,6 +190,35 @@ function DashboardContent() {
           </tbody>
         </table>
       </div>
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1.5 text-sm border rounded-lg bg-white hover:bg-gray-50 disabled:opacity-40"
+          >
+            이전
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={`px-3 py-1.5 text-sm border rounded-lg ${page === p ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"}`}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-1.5 text-sm border rounded-lg bg-white hover:bg-gray-50 disabled:opacity-40"
+          >
+            다음
+          </button>
+        </div>
+      )}
 
       <button
         onClick={() => {
