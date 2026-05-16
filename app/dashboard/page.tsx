@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 
 type Submission = {
   id: string
@@ -22,11 +23,24 @@ type Data = {
 }
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams()
   const [apiKey, setApiKey] = useState("")
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState("")
+
+  useEffect(() => {
+    const keyFromUrl = searchParams.get("api_key")
+    if (keyFromUrl) {
+      setApiKey(keyFromUrl)
+      setLoading(true)
+      fetch(`/api/submissions?api_key=${encodeURIComponent(keyFromUrl)}`)
+        .then(res => res.status === 401 ? null : res.json())
+        .then(d => { if (d) setData(d); else setError("API Key가 올바르지 않습니다.") })
+        .finally(() => setLoading(false))
+    }
+  }, [searchParams])
 
   const load = async (e: React.FormEvent) => {
     e.preventDefault()

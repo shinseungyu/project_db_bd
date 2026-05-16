@@ -189,6 +189,18 @@ export default function AdminPage() {
           <button onClick={sendAll} disabled={sending === "all"} className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 disabled:opacity-50 font-semibold">
             {sending === "all" ? "전송 중..." : `전체 전송 (${submissions.filter(s => !s.sent_at).length}건)`}
           </button>
+          <button
+            onClick={async () => {
+              const res = await fetch("/api/master-key", { headers })
+              if (res.ok) {
+                const { key } = await res.json()
+                window.open(`/dashboard?api_key=${encodeURIComponent(key)}`, "_blank")
+              }
+            }}
+            className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700"
+          >
+            전체 대시보드
+          </button>
           <a href="/dashboard" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">클라이언트 대시보드</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
