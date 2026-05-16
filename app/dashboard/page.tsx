@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 
 type Submission = {
@@ -22,7 +22,7 @@ type Data = {
   submissions: Submission[]
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams()
   const [apiKey, setApiKey] = useState("")
   const [data, setData] = useState<Data | null>(null)
@@ -149,5 +149,13 @@ export default function DashboardPage() {
         CSV 다운로드
       </button>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">로딩 중...</div>}>
+      <DashboardContent />
+    </Suspense>
   )
 }
