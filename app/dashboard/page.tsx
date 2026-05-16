@@ -31,6 +31,7 @@ function DashboardContent() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState("")
+  const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
     const keyFromUrl = searchParams.get("api_key")
@@ -76,16 +77,23 @@ function DashboardContent() {
     )
   }
 
-  const filtered = data.submissions.filter((s) =>
-    !filter || s.name?.includes(filter) || s.cellphone?.includes(filter)
-  )
+  const EXCLUDED = ["신승윤", "테스트"]
+  const toDateKey = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
+  const uniqueDates = ["all", ...Array.from(new Set(data.submissions.map((s) => toDateKey(s.created_at))))]
+
+  const filtered = data.submissions.filter((s) => {
+    if (EXCLUDED.includes(s.name)) return false
+    const matchText = !filter || s.name?.includes(filter) || s.cellphone?.includes(filter)
+    const matchDate = dateFilter === "all" || toDateKey(s.created_at) === dateFilter
+    return matchText && matchDate
+  })
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{data.site.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">총 {data.submissions.length}건 수신</p>
+          <p className="text-sm text-gray-500 mt-0.5">총 {filtered.length}건 표시</p>
         </div>
         <div className="flex gap-2">
           <a href="/" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 메인</a>
@@ -93,13 +101,24 @@ function DashboardContent() {
         </div>
       </div>
 
-      <input
-        type="text"
-        placeholder="이름, 전화번호 검색..."
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        className="w-full mb-4 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
-      />
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="이름, 전화번호 검색..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+        />
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+        >
+          {uniqueDates.map((d) => (
+            <option key={d} value={d}>{d === "all" ? "전체 날짜" : d}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="bg-white rounded-2xl border overflow-x-auto">
         <table className="w-full text-sm">
