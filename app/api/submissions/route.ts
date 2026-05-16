@@ -28,6 +28,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data ?? [])
   }
 
+  // 마스터 키: 전체 데이터 조회
+  if (apiKey === process.env.MASTER_API_KEY) {
+    const { data } = await supabaseAdmin
+      .from("submissions")
+      .select("id, name, birthday, cellphone, sex, location, region, has_license, category, purpose, sent_at, created_at, sites(name)")
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(500)
+    return NextResponse.json({ site: { name: "전체" }, submissions: data ?? [] })
+  }
+
   // 클라이언트: api_key로 자기 사이트 + 전송된 데이터만
   const { data: site } = await supabaseAdmin
     .from("sites")
@@ -41,7 +52,7 @@ export async function GET(req: NextRequest) {
     .from("submissions")
     .select("id, name, birthday, cellphone, sex, location, region, has_license, category, purpose, sent_at, created_at")
     .eq("site_id", site.id)
-    .not("sent_at", "is", null)   // 전송된 것만
+    .not("sent_at", "is", null)
     .order("sent_at", { ascending: false })
     .limit(500)
 
@@ -51,11 +62,25 @@ export async function GET(req: NextRequest) {
 // 관리자가 전송 처리 (sent_at 설정)
 export async function PATCH(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
-  const { id } = await req.json()
+  const body = await req.json()
+
+  // 전체 전송
+  if (body.all) {
+    let query = supabaseAdmin
+      .from("submissions")
+      .update({ sent_at: new Date().toISOString() })
+      .is("sent_at", null)
+    if (body.site_id) query = query.eq("site_id", body.site_id)
+    const { error } = await query
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, all: true })
+  }
+
+  // 개별 전송
   const { error } = await supabaseAdmin
     .from("submissions")
     .update({ sent_at: new Date().toISOString() })
-    .eq("id", id)
+    .eq("id", body.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

@@ -86,7 +86,25 @@ export default function AdminPage() {
       setSubmissions((prev) =>
         prev.map((s) => s.id === id ? { ...s, sent_at: new Date().toISOString() } : s)
       )
-      setStatusFilter("sent")
+    }
+    setSending(null)
+  }
+
+  const sendAll = async () => {
+    const pendingIds = submissions.filter((s) => !s.sent_at).map((s) => s.id)
+    if (pendingIds.length === 0) return alert("전송할 데이터가 없습니다.")
+    if (!confirm(`미전송 ${pendingIds.length}건을 전체 전송하시겠습니까?`)) return
+    setSending("all")
+    const res = await fetch("/api/submissions", {
+      method: "PATCH",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ all: true }),
+    })
+    if (res.ok) {
+      const now = new Date().toISOString()
+      setSubmissions((prev) =>
+        prev.map((s) => s.sent_at ? s : { ...s, sent_at: now })
+      )
     }
     setSending(null)
   }
@@ -168,6 +186,9 @@ export default function AdminPage() {
           <span className="text-sm bg-yellow-50 text-yellow-700 border border-yellow-200 px-3 py-1.5 rounded-lg font-semibold">미전송 {pendingCount}건</span>
           <span className="text-sm bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-semibold">전송완료 {sentCount}건</span>
           <a href="/" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 메인</a>
+          <button onClick={sendAll} disabled={sending === "all"} className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 disabled:opacity-50 font-semibold">
+            {sending === "all" ? "전송 중..." : `전체 전송 (${submissions.filter(s => !s.sent_at).length}건)`}
+          </button>
           <a href="/dashboard" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">클라이언트 대시보드</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
