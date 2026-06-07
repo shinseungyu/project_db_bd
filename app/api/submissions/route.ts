@@ -86,8 +86,23 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
-  const { id } = await req.json()
-  await supabaseAdmin.from("submissions").delete().eq("id", id)
-  return NextResponse.json({ ok: true })
+  const body = await req.json()
+  const { id } = body
+
+  // 관리자 또는 마스터키
+  if (isAdmin(req) || body.api_key === process.env.MASTER_API_KEY) {
+    await supabaseAdmin.from("submissions").delete().eq("id", id)
+    return NextResponse.json({ ok: true })
+  }
+
+  // 클라이언트: api_key로 자기 사이트 데이터만 삭제 허용
+  const apiKey = body.api_key
+  if (apiKey) {
+    const { data: site } = await supabaseAdmin.from("sites").select("id").eq("api_key", apiKey).single()
+    if (!site) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+    await supabaseAdmin.from("submissions").delete().eq("id", id).eq("site_id", site.id)
+    return NextResponse.json({ ok: true })
+  }
+
+  return NextResponse.json({ error: "unauthorized" }, { status: 401 })
 }

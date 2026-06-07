@@ -39,6 +39,7 @@ function DashboardContent() {
   const [page, setPage] = useState(1)
   const [newCount, setNewCount] = useState(0)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem(LAST_SEEN_KEY)
@@ -112,6 +113,18 @@ function DashboardContent() {
 
   const handleFilterChange = (fn: () => void) => { fn(); setPage(1) }
 
+  const deleteSubmission = async (id: string) => {
+    if (!confirm("삭제하시겠습니까?")) return
+    setDeleting(id)
+    await fetch("/api/submissions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, api_key: apiKey }),
+    })
+    setData((prev) => prev ? { ...prev, submissions: prev.submissions.filter((s) => s.id !== id) } : prev)
+    setDeleting(null)
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* 신규 데이터 알림 */}
@@ -168,6 +181,7 @@ function DashboardContent() {
               <th className="px-4 py-3 text-left font-semibold text-gray-600">카테고리</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600">목적</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600">수신일시</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-600"></th>
             </tr>
           </thead>
           <tbody>
@@ -185,6 +199,15 @@ function DashboardContent() {
                 <td className="px-4 py-2.5 text-gray-500">{s.category || "-"}</td>
                 <td className="px-4 py-2.5 text-gray-500">{s.purpose || "-"}</td>
                 <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.created_at).toLocaleString("ko-KR")}</td>
+                <td className="px-4 py-2.5">
+                  <button
+                    onClick={() => deleteSubmission(s.id)}
+                    disabled={deleting === s.id}
+                    className="text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
+                  >
+                    {deleting === s.id ? "삭제 중..." : "삭제"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
