@@ -28,13 +28,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data ?? [])
   }
 
-  // 마스터 키: 전체 데이터 조회
+  // 마스터 키: 전체 데이터 조회 (전송 여부 무관)
   if (apiKey === process.env.MASTER_API_KEY) {
     const { data } = await supabaseAdmin
       .from("submissions")
       .select("id, name, birthday, cellphone, sex, location, region, has_license, category, purpose, sent_at, created_at, sites(name)")
-      .not("sent_at", "is", null)
-      .order("sent_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(500)
     return NextResponse.json({ site: { name: "전체" }, submissions: data ?? [] })
   }
