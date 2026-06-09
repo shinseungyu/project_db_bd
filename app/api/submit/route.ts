@@ -78,9 +78,13 @@ export async function POST(req: NextRequest) {
           fields: [
             { name: "사이트", value: siteInfo?.name ?? "-", inline: true },
             { name: "이름", value: submission.name || "-", inline: true },
+            { name: "생년월일", value: submission.birthday || "-", inline: true },
             { name: "전화번호", value: submission.cellphone || "-", inline: true },
+            { name: "성별", value: submission.sex || "-", inline: true },
             { name: "지역", value: submission.region || "-", inline: true },
+            { name: "자격증", value: submission.has_license || "-", inline: true },
             { name: "카테고리", value: submission.category || "-", inline: true },
+            { name: "목적", value: submission.purpose || "-", inline: true },
           ],
           timestamp: new Date().toISOString(),
         }],
