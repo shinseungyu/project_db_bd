@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
 
   // Discord 알림
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+  const webhookUrl = "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
   if (webhookUrl) {
     const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
     await fetch(webhookUrl, {
