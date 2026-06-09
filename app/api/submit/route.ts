@@ -64,6 +64,30 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
 
+  // Discord 알림
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+  if (webhookUrl) {
+    const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
+    fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "📥 새 신청 접수",
+          color: 0x5865F2,
+          fields: [
+            { name: "사이트", value: siteInfo?.name ?? "-", inline: true },
+            { name: "이름", value: submission.name || "-", inline: true },
+            { name: "전화번호", value: submission.cellphone || "-", inline: true },
+            { name: "지역", value: submission.region || "-", inline: true },
+            { name: "카테고리", value: submission.category || "-", inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    }).catch(() => {})
+  }
+
   return NextResponse.json({ ok: true, id: data.id }, { headers: corsHeaders })
 }
 
