@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL
   if (webhookUrl) {
     const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
-    fetch(webhookUrl, {
+    await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
