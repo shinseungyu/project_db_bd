@@ -64,10 +64,20 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
 
-  // Discord 알림
-  const webhookUrl = "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
+  // Discord 알림 — 사이트별로 채널을 나눈다.
+  //   DISCORD_WEBHOOK_MAP: {"<사이트명 또는 api_key>": "<웹후크 URL>"} · 없으면 DISCORD_WEBHOOK_URL(공용 채널)
+  const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
+  let webhookMap: Record<string, string> = {}
+  try {
+    webhookMap = JSON.parse(process.env.DISCORD_WEBHOOK_MAP ?? "{}")
+  } catch {
+    // 환경변수가 깨져 있어도 알림은 공용 채널로 계속 나가야 한다
+  }
+  // 아래 기본값은 원래 코드에 박혀 있던 공용 채널이다. 환경변수가 없는 배포에서도 기존 사이트 알림이 끊기지 않게 남겨 둔다
+  const DEFAULT_WEBHOOK =
+    "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
+  const webhookUrl = webhookMap[apiKey] ?? webhookMap[siteInfo?.name ?? ""] ?? process.env.DISCORD_WEBHOOK_URL ?? DEFAULT_WEBHOOK
   if (webhookUrl) {
-    const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
     await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
