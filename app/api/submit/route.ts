@@ -77,8 +77,21 @@ export async function POST(req: NextRequest) {
   const DEFAULT_WEBHOOK =
     "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
   const webhookUrl = webhookMap[apiKey] ?? webhookMap[siteInfo?.name ?? ""] ?? process.env.DISCORD_WEBHOOK_URL ?? DEFAULT_WEBHOOK
-  if (webhookUrl) {
-    await fetch(webhookUrl, {
+
+  // 수도권(서울·경기·인천) 리드는 원래 채널에 더해 수도권 전용 채널로도 보낸다.
+  //   입시 사이트(DISCORD_IPSI_SITES: 사이트명 또는 api_key, 쉼표 구분) → DISCORD_WEBHOOK_IPSI_METRO
+  //   그 외 사이트 → DISCORD_WEBHOOK_METRO
+  // 웹후크 주소는 저장소가 공개라 코드에 넣지 않는다. 환경변수가 없으면 원래 채널로만 간다
+  const ipsiSites = (process.env.DISCORD_IPSI_SITES ?? "뷰티아이피").split(",").map((s) => s.trim()).filter(Boolean)
+  const isIpsi = ipsiSites.includes(apiKey) || ipsiSites.includes(siteInfo?.name ?? "")
+  const isMetro = /^(서울|경기|인천)/.test(submission.region.trim())
+  const metroWebhook = isMetro
+    ? (isIpsi ? process.env.DISCORD_WEBHOOK_IPSI_METRO : process.env.DISCORD_WEBHOOK_METRO)
+    : undefined
+
+  const webhookUrls = [...new Set([webhookUrl, metroWebhook].filter((u): u is string => !!u))]
+  if (webhookUrls.length) {
+    await Promise.all(webhookUrls.map((url) => fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -99,7 +112,7 @@ export async function POST(req: NextRequest) {
           timestamp: new Date().toISOString(),
         }],
       }),
-    }).catch(() => {})
+    }).catch(() => {})))
   }
 
   return NextResponse.json({ ok: true, id: data.id }, { headers: corsHeaders })
