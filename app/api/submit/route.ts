@@ -92,7 +92,12 @@ export async function POST(req: NextRequest) {
       ? (isIpsi ? process.env.DISCORD_WEBHOOK_IPSI_METRO : process.env.DISCORD_WEBHOOK_METRO)
       : process.env.DISCORD_WEBHOOK_LOCAL
 
-  const webhookUrls = [...new Set([webhookUrl, regionWebhook].filter((u): u is string => !!u))]
+  // 이름이 "테스트"인 접수는 테스트 대시보드 전용이다(/api/submissions?test=1 과 같은 기준).
+  // 고객이 보는 채널로는 보내지 않고, DISCORD_WEBHOOK_TEST 가 있으면 그 채널로만 알린다.
+  const isTest = submission.name.trim() === "테스트"
+  const webhookUrls = isTest
+    ? [process.env.DISCORD_WEBHOOK_TEST].filter((u): u is string => !!u)
+    : [...new Set([webhookUrl, regionWebhook].filter((u): u is string => !!u))]
   if (webhookUrls.length) {
     await Promise.all(webhookUrls.map((url) => fetch(url, {
       method: "POST",
