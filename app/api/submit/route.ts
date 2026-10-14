@@ -67,6 +67,11 @@ export async function POST(req: NextRequest) {
   // Discord 알림 — 사이트별로 채널을 나눈다.
   //   DISCORD_WEBHOOK_MAP: {"<사이트명 또는 api_key>": "<웹후크 URL>"} · 없으면 DISCORD_WEBHOOK_URL(공용 채널)
   const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
+  // 같은 채널로 받아야 하는 자매 사이트 — 웹후크 설정(DISCORD_WEBHOOK_MAP·DISCORD_IPSI_SITES)을 기준 사이트와 똑같이 따른다.
+  //   beautyipsi.kr(뷰입노트)는 beautyip.kr 과 같은 미용입시 상담으로 들어가므로 알림도 같은 곳으로 보낸다
+  const SAME_CHANNEL_AS: Record<string, string> = { "beautyipsi.kr": "beautyip.kr" }
+  const siteName = siteInfo?.name ?? ""
+  const channelSite = SAME_CHANNEL_AS[siteName] ?? siteName
   let webhookMap: Record<string, string> = {}
   try {
     webhookMap = JSON.parse(process.env.DISCORD_WEBHOOK_MAP ?? "{}")
@@ -76,7 +81,7 @@ export async function POST(req: NextRequest) {
   // 아래 기본값은 원래 코드에 박혀 있던 공용 채널이다. 환경변수가 없는 배포에서도 기존 사이트 알림이 끊기지 않게 남겨 둔다
   const DEFAULT_WEBHOOK =
     "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
-  const webhookUrl = webhookMap[apiKey] ?? webhookMap[siteInfo?.name ?? ""] ?? process.env.DISCORD_WEBHOOK_URL ?? DEFAULT_WEBHOOK
+  const webhookUrl = webhookMap[apiKey] ?? webhookMap[siteName] ?? webhookMap[channelSite] ?? process.env.DISCORD_WEBHOOK_URL ?? DEFAULT_WEBHOOK
 
   // 지역별 추가 채널 — 원래 채널에는 그대로 가고, 아래 채널로도 한 번 더 보낸다.
   //   수도권(서울·경기·인천) + 입시 사이트(DISCORD_IPSI_SITES: 사이트명 또는 api_key, 쉼표 구분) → DISCORD_WEBHOOK_IPSI_METRO
@@ -84,7 +89,7 @@ export async function POST(req: NextRequest) {
   //   그 외 지역(모든 사이트) → DISCORD_WEBHOOK_LOCAL · 지역이 비어 있으면 추가 채널 없음
   // 웹후크 주소는 저장소가 공개라 코드에 넣지 않는다. 환경변수가 없으면 원래 채널로만 간다
   const ipsiSites = (process.env.DISCORD_IPSI_SITES ?? "beautyip.kr").split(",").map((s) => s.trim()).filter(Boolean)
-  const isIpsi = ipsiSites.includes(apiKey) || ipsiSites.includes(siteInfo?.name ?? "")
+  const isIpsi = ipsiSites.includes(apiKey) || ipsiSites.includes(siteName) || ipsiSites.includes(channelSite)
   const region = submission.region.trim()
   const regionWebhook = !region
     ? undefined
