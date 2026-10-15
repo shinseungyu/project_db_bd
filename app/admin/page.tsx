@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { COLUMNS, VERTICALS, verticalLabel, verticalOf, type Vertical } from "@/lib/verticals"
 
 type Submission = {
   id: string
@@ -24,34 +25,43 @@ type Site = {
   name: string
   api_key: string
   owner_email: string
+  vertical?: string | null
   created_at: string
 }
+
+const EMPTY: Record<Vertical, Submission[]> = { beauty: [], internet: [] }
 
 export default function AdminPage() {
   const [adminId, setAdminId] = useState("")
   const [password, setPassword] = useState("")
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState("")
-  const [submissions, setSubmissions] = useState<Submission[]>([])
+  // 업종 탭 — 접수·사이트·전체 전송이 전부 이 업종 기준이다
+  const [vertical, setVertical] = useState<Vertical>("beauty")
+  const [subsBy, setSubsBy] = useState<Record<Vertical, Submission[]>>(EMPTY)
   const [sites, setSites] = useState<Site[]>([])
   const [tab, setTab] = useState<"submissions" | "sites">("submissions")
   const [loading, setLoading] = useState(false)
-  const [newSite, setNewSite] = useState({ name: "", owner_email: "", api_key: "" })
+  const [newSite, setNewSite] = useState<{ name: string; owner_email: string; api_key: string; vertical: Vertical }>({ name: "", owner_email: "", api_key: "", vertical: "beauty" })
   const [filter, setFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "sent">("all")
   const [dateFilter, setDateFilter] = useState<string>("all")
   const [sending, setSending] = useState<string | null>(null)
 
   const headers = { "x-admin-id": adminId, "x-admin-password": password }
+  const submissions = subsBy[vertical]
+  const setSubmissions = (fn: (prev: Submission[]) => Submission[]) => setSubsBy((all) => ({ ...all, [vertical]: fn(all[vertical]) }))
 
   const load = useCallback(async (id: string, pw: string) => {
     setLoading(true)
-    const [s, st] = await Promise.all([
-      fetch("/api/submissions", { headers: { "x-admin-id": id, "x-admin-password": pw } }),
-      fetch("/api/sites", { headers: { "x-admin-id": id, "x-admin-password": pw } }),
+    const h = { "x-admin-id": id, "x-admin-password": pw }
+    const [b, i, st] = await Promise.all([
+      fetch("/api/submissions?vertical=beauty", { headers: h }),
+      fetch("/api/submissions?vertical=internet", { headers: h }),
+      fetch("/api/sites", { headers: h }),
     ])
-    if (s.status === 401) { setAuthError("아이디 또는 비밀번호가 틀렸습니다."); setLoading(false); return }
-    setSubmissions(await s.json())
+    if (b.status === 401) { setAuthError("아이디 또는 비밀번호가 틀렸습니다."); setLoading(false); return }
+    setSubsBy({ beauty: await b.json(), internet: await i.json() })
     setSites(await st.json())
     setAuthed(true)
     localStorage.setItem("admin_id", id)
@@ -93,12 +103,12 @@ export default function AdminPage() {
   const sendAll = async () => {
     const pendingIds = submissions.filter((s) => !s.sent_at).map((s) => s.id)
     if (pendingIds.length === 0) return alert("전송할 데이터가 없습니다.")
-    if (!confirm(`미전송 ${pendingIds.length}건을 전체 전송하시겠습니까?`)) return
+    if (!confirm(`${verticalLabel(vertical)} 미전송 ${pendingIds.length}건을 전체 전송하시겠습니까?`)) return
     setSending("all")
     const res = await fetch("/api/submissions", {
       method: "PATCH",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ all: true }),
+      body: JSON.stringify({ all: true, vertical }),
     })
     if (res.ok) {
       const now = new Date().toISOString()
@@ -111,7 +121,7 @@ export default function AdminPage() {
 
   const addSite = async (e: React.FormEvent) => {
     e.preventDefault()
-    const payload: Record<string, string> = { name: newSite.name, owner_email: newSite.owner_email }
+    const payload: Record<string, string> = { name: newSite.name, owner_email: newSite.owner_email, vertical: newSite.vertical }
     if (newSite.api_key) payload.api_key = newSite.api_key
     const res = await fetch("/api/sites", {
       method: "POST",
@@ -121,7 +131,11 @@ export default function AdminPage() {
     if (res.ok) {
       const site = await res.json()
       setSites((p) => [site, ...p])
-      setNewSite({ name: "", owner_email: "", api_key: "" })
+      setNewSite({ name: "", owner_email: "", api_key: "", vertical })
+    } else {
+      const { error } = await res.json().catch(() => ({ error: "" }))
+      const hint = newSite.vertical === "internet" ? "\n(인터넷 업종은 supabase/2026-10-15_sites_vertical.sql 을 먼저 실행해야 합니다)" : ""
+      alert(`사이트 추가 실패${error ? `: ${error}` : ""}${hint}`)
     }
   }
 
@@ -165,6 +179,8 @@ export default function AdminPage() {
     )
   }
 
+  const columns = COLUMNS[vertical]
+  const vSites = sites.filter((s) => verticalOf(s) === vertical)
   const pendingCount = submissions.filter((s) => !s.sent_at).length
   const sentCount = submissions.filter((s) => !!s.sent_at).length
 
@@ -194,12 +210,12 @@ export default function AdminPage() {
               const res = await fetch("/api/master-key", { headers })
               if (res.ok) {
                 const { key } = await res.json()
-                window.open(`/dashboard?api_key=${encodeURIComponent(key)}`, "_blank")
+                window.open(`/dashboard?api_key=${encodeURIComponent(key)}&vertical=${vertical}`, "_blank")
               }
             }}
             className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700"
           >
-            전체 대시보드
+            {verticalLabel(vertical)} 전체 대시보드
           </button>
           <a href="/dashboard" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">클라이언트 대시보드</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
@@ -207,11 +223,30 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* 업종 탭 */}
+      <div className="inline-flex gap-1 p-1 mb-5 rounded-2xl bg-gray-100">
+        {VERTICALS.map(({ key, label }) => {
+          const pending = subsBy[key].filter((s) => !s.sent_at).length
+          return (
+            <button
+              key={key}
+              onClick={() => { setVertical(key); setNewSite((p) => ({ ...p, vertical: key })); setFilter(""); setDateFilter("all") }}
+              className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${vertical === key ? (key === "internet" ? "bg-blue-600 text-white shadow" : "bg-pink-500 text-white shadow") : "text-gray-500 hover:text-gray-800"}`}
+            >
+              {label}
+              <span className={`ml-2 text-xs font-semibold ${vertical === key ? "text-white/80" : "text-gray-400"}`}>
+                {subsBy[key].length}건{pending ? ` · 미전송 ${pending}` : ""}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       {/* 탭 */}
       <div className="flex gap-2 mb-6 border-b">
         {(["submissions", "sites"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`pb-3 px-1 text-sm font-semibold border-b-2 transition-colors ${tab === t ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-            {t === "submissions" ? `수신 데이터 (${submissions.length})` : `사이트 관리 (${sites.length})`}
+            {t === "submissions" ? `수신 데이터 (${submissions.length})` : `사이트 관리 (${vSites.length})`}
           </button>
         ))}
       </div>
@@ -234,7 +269,7 @@ export default function AdminPage() {
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
-              placeholder="이름, 전화번호, 사이트명 검색..."
+              placeholder={vertical === "internet" ? "전화번호, 사이트명 검색..." : "이름, 전화번호, 사이트명 검색..."}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               className="flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white"
@@ -258,21 +293,16 @@ export default function AdminPage() {
                 <tr className="border-b bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">상태</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">사이트</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">이름</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">생년월일</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">전화번호</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">성별</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">지역</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">자격증</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">카테고리</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">목적</th>
+                  {columns.map((c) => (
+                    <th key={c.label} className="px-4 py-3 text-left font-semibold text-gray-600">{c.label}</th>
+                  ))}
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">수신일시</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">액션</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={columns.length + 4} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                 )}
                 {filtered.map((s) => (
                   <tr key={s.id} className={`border-b ${s.sent_at ? "bg-gray-50/50" : "hover:bg-yellow-50/30"}`}>
@@ -289,14 +319,15 @@ export default function AdminPage() {
                           : <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{s.sites.name}</span>
                         : "-"}
                     </td>
-                    <td className="px-4 py-2.5 font-medium">{s.name || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
-                    <td className="px-4 py-2.5">{s.cellphone || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.sex || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.region || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.has_license || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.category || "-"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{s.purpose || "-"}</td>
+                    {columns.map((c) => (
+                      <td
+                        key={c.label}
+                        title={c.wide ? c.get(s) : undefined}
+                        className={`px-4 py-2.5 ${c.strong ? "font-medium" : "text-gray-500"}${c.wide ? " max-w-[16rem] truncate" : ""}`}
+                      >
+                        {c.get(s) || "-"}
+                      </td>
+                    ))}
                     <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.created_at).toLocaleString("ko-KR")}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex gap-2">
@@ -323,6 +354,16 @@ export default function AdminPage() {
       {tab === "sites" && (
         <div className="space-y-6">
           <form onSubmit={addSite} className="bg-white rounded-2xl border p-6 flex flex-col sm:flex-row gap-3">
+            <select
+              value={newSite.vertical}
+              onChange={(e) => setNewSite((p) => ({ ...p, vertical: e.target.value as Vertical }))}
+              className="border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white font-semibold"
+              aria-label="업종"
+            >
+              {VERTICALS.map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
             <input
               placeholder="사이트명 *"
               value={newSite.name}
@@ -352,6 +393,7 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">업종</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">사이트명</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">API Key (클라이언트에게 전달)</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">담당자</th>
@@ -360,11 +402,16 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {sites.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">등록된 사이트가 없습니다.</td></tr>
+                {vSites.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">등록된 {verticalLabel(vertical)} 사이트가 없습니다.</td></tr>
                 )}
-                {sites.map((s) => (
+                {vSites.map((s) => (
                   <tr key={s.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-2.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${verticalOf(s) === "internet" ? "bg-blue-50 text-blue-700" : "bg-pink-50 text-pink-600"}`}>
+                        {verticalLabel(verticalOf(s))}
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5 font-medium">{s.name}</td>
                     <td className="px-4 py-2.5 font-mono text-xs bg-gray-50 text-gray-600 select-all">{s.api_key}</td>
                     <td className="px-4 py-2.5 text-gray-500">{s.owner_email || "-"}</td>

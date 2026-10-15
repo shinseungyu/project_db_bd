@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { verticalOf } from "@/lib/verticals"
 
 export async function POST(req: NextRequest) {
   const corsHeaders = {
@@ -11,13 +12,15 @@ export async function POST(req: NextRequest) {
   const apiKey = req.nextUrl.searchParams.get("api_key")
   if (!apiKey) return NextResponse.json({ error: "api_key required" }, { status: 401, headers: corsHeaders })
 
+  // select("*") — vertical 컬럼이 없는 DB(마이그레이션 전)에서도 깨지지 않게
   const { data: site } = await supabaseAdmin
     .from("sites")
-    .select("id")
+    .select("*")
     .eq("api_key", apiKey)
     .single()
   if (!site) return NextResponse.json({ error: "invalid api_key" }, { status: 401, headers: corsHeaders })
   const siteId: string = site.id
+  const isInternet = verticalOf(site) === "internet"
 
   let body: Record<string, string> = {}
   const ct = req.headers.get("content-type") ?? ""
@@ -65,8 +68,9 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders })
 
   // Discord 알림 — 사이트별로 채널을 나눈다.
-  //   DISCORD_WEBHOOK_MAP: {"<사이트명 또는 api_key>": "<웹후크 URL>"} · 없으면 DISCORD_WEBHOOK_URL(공용 채널)
-  const { data: siteInfo } = await supabaseAdmin.from("sites").select("name").eq("id", siteId).single()
+  //   DISCORD_WEBHOOK_MAP: {"<사이트명 또는 api_key>": "<웹후크 URL>"} · 없으면 업종 채널 → DISCORD_WEBHOOK_URL(공용 채널)
+  //   인터넷 업종: DISCORD_WEBHOOK_INTERNET(인터넷 공용 채널). 없으면 공용 채널로 가되 제목에 [인터넷] 을 붙여 구분한다
+  const siteInfo = site as { name?: string }
   // 같은 채널로 받아야 하는 자매 사이트 — 웹후크 설정(DISCORD_WEBHOOK_MAP·DISCORD_IPSI_SITES)을 기준 사이트와 똑같이 따른다.
   //   beautyipsi.kr(뷰입노트)는 beautyip.kr 과 같은 미용입시 상담으로 들어가므로 알림도 같은 곳으로 보낸다
   const SAME_CHANNEL_AS: Record<string, string> = { "beautyipsi.kr": "beautyip.kr" }
@@ -81,7 +85,13 @@ export async function POST(req: NextRequest) {
   // 아래 기본값은 원래 코드에 박혀 있던 공용 채널이다. 환경변수가 없는 배포에서도 기존 사이트 알림이 끊기지 않게 남겨 둔다
   const DEFAULT_WEBHOOK =
     "https://discord.com/api/webhooks/1513916271052198124/4srLa7so23W6ZUnY14hqOBg7EQhZhdkn0OcVUHsCTg6P5OKlIDHshAt8p970uZOULJQ4"
-  const webhookUrl = webhookMap[apiKey] ?? webhookMap[siteName] ?? webhookMap[channelSite] ?? process.env.DISCORD_WEBHOOK_URL ?? DEFAULT_WEBHOOK
+  const webhookUrl =
+    webhookMap[apiKey] ??
+    webhookMap[siteName] ??
+    webhookMap[channelSite] ??
+    (isInternet ? process.env.DISCORD_WEBHOOK_INTERNET : undefined) ??
+    process.env.DISCORD_WEBHOOK_URL ??
+    DEFAULT_WEBHOOK
 
   // 지역별 추가 채널 — 원래 채널에는 그대로 가고, 아래 채널로도 한 번 더 보낸다.
   //   수도권(서울·경기·인천) + 입시 사이트(DISCORD_IPSI_SITES: 사이트명 또는 api_key, 쉼표 구분) → DISCORD_WEBHOOK_IPSI_METRO
@@ -90,7 +100,8 @@ export async function POST(req: NextRequest) {
   // 웹후크 주소는 저장소가 공개라 코드에 넣지 않는다. 환경변수가 없으면 원래 채널로만 간다
   const ipsiSites = (process.env.DISCORD_IPSI_SITES ?? "beautyip.kr").split(",").map((s) => s.trim()).filter(Boolean)
   const isIpsi = ipsiSites.includes(apiKey) || ipsiSites.includes(siteName) || ipsiSites.includes(channelSite)
-  const region = submission.region.trim()
+  // 지역 채널은 뷰티 리드 전용이다(인터넷 폼은 지역을 받지 않는다)
+  const region = isInternet ? "" : submission.region.trim()
   const regionWebhook = !region
     ? undefined
     : /^(서울|경기|인천)/.test(region)
@@ -108,22 +119,34 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        embeds: [{
-          title: "📥 새 신청 접수",
-          color: 0x5865F2,
-          fields: [
-            { name: "사이트", value: siteInfo?.name ?? "-", inline: true },
-            { name: "이름", value: submission.name || "-", inline: true },
-            { name: "생년월일", value: submission.birthday || "-", inline: true },
-            { name: "전화번호", value: submission.cellphone || "-", inline: true },
-            { name: "성별", value: submission.sex || "-", inline: true },
-            { name: "지역", value: submission.region || "-", inline: true },
-            { name: "자격증", value: submission.has_license || "-", inline: true },
-            { name: "카테고리", value: submission.category || "-", inline: true },
-            { name: "목적", value: submission.purpose || "-", inline: true },
-          ],
-          timestamp: new Date().toISOString(),
-        }],
+        embeds: [isInternet
+          ? {
+              title: "📥 [인터넷] 새 상담 접수",
+              color: 0x2563EB,
+              fields: [
+                { name: "사이트", value: siteInfo?.name ?? "-", inline: true },
+                { name: "전화번호", value: submission.cellphone || "-", inline: true },
+                { name: "신청 페이지", value: submission.purpose || "-", inline: false },
+                { name: "페이지 주소", value: submission.location || "-", inline: false },
+              ],
+              timestamp: new Date().toISOString(),
+            }
+          : {
+              title: "📥 새 신청 접수",
+              color: 0x5865F2,
+              fields: [
+                { name: "사이트", value: siteInfo?.name ?? "-", inline: true },
+                { name: "이름", value: submission.name || "-", inline: true },
+                { name: "생년월일", value: submission.birthday || "-", inline: true },
+                { name: "전화번호", value: submission.cellphone || "-", inline: true },
+                { name: "성별", value: submission.sex || "-", inline: true },
+                { name: "지역", value: submission.region || "-", inline: true },
+                { name: "자격증", value: submission.has_license || "-", inline: true },
+                { name: "카테고리", value: submission.category || "-", inline: true },
+                { name: "목적", value: submission.purpose || "-", inline: true },
+              ],
+              timestamp: new Date().toISOString(),
+            }],
       }),
     }).catch(() => {})))
   }

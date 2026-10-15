@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic"
 
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
+import { COLUMNS, parseVertical, verticalOf } from "@/lib/verticals"
 
 type Submission = {
   id: string
@@ -20,7 +21,8 @@ type Submission = {
 }
 
 type Data = {
-  site: { name: string }
+  /** vertical — 사이트 업종. 표·CSV 컬럼이 업종별로 다르다(lib/verticals.ts) */
+  site: { name: string; vertical?: string }
   submissions: Submission[]
 }
 
@@ -48,7 +50,9 @@ function DashboardContent() {
 
   const loadData = (key: string) => {
     setLoading(true)
-    fetch(`/api/submissions?api_key=${encodeURIComponent(key)}`)
+    // 마스터 키로 열 때만 ?vertical= 이 의미가 있다(관리자 화면의 업종별 "전체 대시보드")
+    const vertical = parseVertical(searchParams.get("vertical"))
+    fetch(`/api/submissions?api_key=${encodeURIComponent(key)}${vertical ? `&vertical=${vertical}` : ""}`)
       .then(res => res.status === 401 ? null : res.json())
       .then(d => {
         if (!d) { setError("API Key가 올바르지 않습니다."); return }
@@ -98,6 +102,7 @@ function DashboardContent() {
     )
   }
 
+  const columns = COLUMNS[verticalOf(data.site)]
   const toDateKey = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })
   const uniqueDates = ["all", ...Array.from(new Set(data.submissions.map((s) => toDateKey(s.created_at))))]
 
@@ -172,32 +177,28 @@ function DashboardContent() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">이름</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">생년월일</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">전화번호</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">성별</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">지역</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">자격증</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">카테고리</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600">목적</th>
+              {columns.map((c) => (
+                <th key={c.label} className="px-4 py-3 text-left font-semibold text-gray-600">{c.label}</th>
+              ))}
               <th className="px-4 py-3 text-left font-semibold text-gray-600">수신일시</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600"></th>
             </tr>
           </thead>
           <tbody>
             {paginated.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+              <tr><td colSpan={columns.length + 2} className="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
             )}
             {paginated.map((s) => (
               <tr key={s.id} className="border-b hover:bg-gray-50">
-                <td className="px-4 py-2.5 font-medium">{s.name || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.birthday || "-"}</td>
-                <td className="px-4 py-2.5">{s.cellphone || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.sex || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.region || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.has_license || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.category || "-"}</td>
-                <td className="px-4 py-2.5 text-gray-500">{s.purpose || "-"}</td>
+                {columns.map((c) => (
+                  <td
+                    key={c.label}
+                    title={c.wide ? c.get(s) : undefined}
+                    className={`px-4 py-2.5 ${c.strong ? "font-medium" : "text-gray-500"}${c.wide ? " max-w-[16rem] truncate" : ""}`}
+                  >
+                    {c.get(s) || "-"}
+                  </td>
+                ))}
                 <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.created_at).toLocaleString("ko-KR")}</td>
                 <td className="px-4 py-2.5">
                   <button
@@ -245,8 +246,8 @@ function DashboardContent() {
 
       <button
         onClick={() => {
-          const header = ["이름", "생년월일", "전화번호", "성별", "지역", "자격증", "카테고리", "목적", "수신일시"]
-          const rows = filtered.map((s) => [s.name, s.birthday, s.cellphone, s.sex, s.region, s.has_license, s.category, s.purpose, new Date(s.created_at).toLocaleString("ko-KR")])
+          const header = [...columns.map((c) => c.label), "수신일시"]
+          const rows = filtered.map((s) => [...columns.map((c) => c.get(s)), new Date(s.created_at).toLocaleString("ko-KR")])
           const csv = [header, ...rows].map((r) => r.map((c) => `"${(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")
           const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" })
           const url = URL.createObjectURL(blob)

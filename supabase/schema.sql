@@ -4,6 +4,8 @@ create table if not exists sites (
   name text not null,
   api_key text unique not null default gen_random_uuid()::text,
   owner_email text,
+  -- 업종: 'beauty' | 'internet' (2026-10-15 추가 — 기존 DB 는 2026-10-15_sites_vertical.sql 실행)
+  vertical text not null default 'beauty' check (vertical in ('beauty', 'internet')),
   created_at timestamptz default now()
 );
 

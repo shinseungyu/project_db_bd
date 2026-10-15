@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { parseVertical } from "@/lib/verticals"
 
 function isAdmin(req: NextRequest) {
   return (
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const insertRow: Record<string, string> = { name: body.name, owner_email: body.owner_email ?? "" }
   if (body.api_key) insertRow.api_key = body.api_key
+  // 뷰티는 컬럼 기본값. 인터넷만 명시 — vertical 컬럼 마이그레이션 전이면 여기서 에러가 난다
+  const vertical = parseVertical(body.vertical)
+  if (vertical && vertical !== "beauty") insertRow.vertical = vertical
   const { data, error } = await supabaseAdmin
     .from("sites")
     .insert(insertRow)
