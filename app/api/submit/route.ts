@@ -157,8 +157,9 @@ export async function POST(req: NextRequest) {
       }),
     })
       // 알림 실패가 접수를 막지는 않지만, 원인은 Vercel 로그(Functions)에 남긴다
-      .then(async (r) => { if (!r.ok) console.error("discord webhook", r.status, await r.text()) })
-      .catch((e) => console.error("discord webhook fetch failed", e))))
+      // 웹후크 ID(주소의 숫자 부분)만 남긴다 — 뒤의 토큰은 비밀이라 로그에 찍지 않는다
+      .then(async (r) => { if (!r.ok) console.error("discord webhook", url.split("/")[5], r.status, await r.text()) })
+      .catch((e) => console.error("discord webhook fetch failed", url.split("/")[5], e))))
   }
 
   return NextResponse.json({ ok: true, id: data.id }, { headers: corsHeaders })
