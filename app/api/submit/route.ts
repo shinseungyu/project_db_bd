@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
   //   DISCORD_WEBHOOK_MAP: {"<사이트명 또는 api_key>": "<웹후크 URL>"} · 없으면 업종 채널 → DISCORD_WEBHOOK_URL(공용 채널)
   //   인터넷 업종: DISCORD_WEBHOOK_INTERNET(인터넷 공용 채널). 없으면 공용 채널로 가되 제목에 [인터넷] 을 붙여 구분한다
   const siteInfo = site as { name?: string }
+  // 환경변수 값에서 웹후크 주소만 뽑는다 — 카톡 등에서 복사하면 "[이름] [시간] https://…" · 앞뒤 공백 · 줄바꿈이 섞여 들어와
+  // fetch 가 조용히 실패한다(2026-10-15 인터넷 채널 알림 누락 원인)
+  const hook = (v?: string) => v?.match(/https:\/\/discord(?:app)?\.com\/api\/webhooks\/\S+/)?.[0]
   // 같은 채널로 받아야 하는 자매 사이트 — 웹후크 설정(DISCORD_WEBHOOK_MAP·DISCORD_IPSI_SITES)을 기준 사이트와 똑같이 따른다.
   //   beautyipsi.kr(뷰입노트)는 beautyip.kr 과 같은 미용입시 상담으로 들어가므로 알림도 같은 곳으로 보낸다
   const SAME_CHANNEL_AS: Record<string, string> = { "beautyipsi.kr": "beautyip.kr" }
@@ -78,7 +81,11 @@ export async function POST(req: NextRequest) {
   const channelSite = SAME_CHANNEL_AS[siteName] ?? siteName
   let webhookMap: Record<string, string> = {}
   try {
-    webhookMap = JSON.parse(process.env.DISCORD_WEBHOOK_MAP ?? "{}")
+    webhookMap = Object.fromEntries(
+      Object.entries(JSON.parse(process.env.DISCORD_WEBHOOK_MAP ?? "{}") as Record<string, string>)
+        .map(([k, v]) => [k, hook(v)])
+        .filter((e): e is [string, string] => !!e[1]),
+    )
   } catch {
     // 환경변수가 깨져 있어도 알림은 공용 채널로 계속 나가야 한다
   }
@@ -89,8 +96,8 @@ export async function POST(req: NextRequest) {
     webhookMap[apiKey] ??
     webhookMap[siteName] ??
     webhookMap[channelSite] ??
-    (isInternet ? process.env.DISCORD_WEBHOOK_INTERNET : undefined) ??
-    process.env.DISCORD_WEBHOOK_URL ??
+    (isInternet ? hook(process.env.DISCORD_WEBHOOK_INTERNET) : undefined) ??
+    hook(process.env.DISCORD_WEBHOOK_URL) ??
     DEFAULT_WEBHOOK
 
   // 지역별 추가 채널 — 원래 채널에는 그대로 가고, 아래 채널로도 한 번 더 보낸다.
@@ -105,14 +112,14 @@ export async function POST(req: NextRequest) {
   const regionWebhook = !region
     ? undefined
     : /^(서울|경기|인천)/.test(region)
-      ? (isIpsi ? process.env.DISCORD_WEBHOOK_IPSI_METRO : process.env.DISCORD_WEBHOOK_METRO)
-      : process.env.DISCORD_WEBHOOK_LOCAL
+      ? hook(isIpsi ? process.env.DISCORD_WEBHOOK_IPSI_METRO : process.env.DISCORD_WEBHOOK_METRO)
+      : hook(process.env.DISCORD_WEBHOOK_LOCAL)
 
   // 이름이 "테스트"인 접수는 테스트 대시보드 전용이다(/api/submissions?test=1 과 같은 기준).
   // 고객이 보는 채널로는 보내지 않고, DISCORD_WEBHOOK_TEST 가 있으면 그 채널로만 알린다.
   const isTest = submission.name.trim() === "테스트"
   const webhookUrls = isTest
-    ? [process.env.DISCORD_WEBHOOK_TEST].filter((u): u is string => !!u)
+    ? [hook(process.env.DISCORD_WEBHOOK_TEST)].filter((u): u is string => !!u)
     : [...new Set([webhookUrl, regionWebhook].filter((u): u is string => !!u))]
   if (webhookUrls.length) {
     await Promise.all(webhookUrls.map((url) => fetch(url, {
@@ -148,7 +155,10 @@ export async function POST(req: NextRequest) {
               timestamp: new Date().toISOString(),
             }],
       }),
-    }).catch(() => {})))
+    })
+      // 알림 실패가 접수를 막지는 않지만, 원인은 Vercel 로그(Functions)에 남긴다
+      .then(async (r) => { if (!r.ok) console.error("discord webhook", r.status, await r.text()) })
+      .catch((e) => console.error("discord webhook fetch failed", e))))
   }
 
   return NextResponse.json({ ok: true, id: data.id }, { headers: corsHeaders })
