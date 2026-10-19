@@ -120,9 +120,13 @@ export async function POST(req: NextRequest) {
   // 이름이 "테스트"인 접수는 테스트 대시보드 전용이다(/api/submissions?test=1 과 같은 기준).
   // 고객이 보는 채널로는 보내지 않고, DISCORD_WEBHOOK_TEST 가 있으면 그 채널로만 알린다.
   const isTest = submission.name.trim() === "테스트"
+  // 단과 채널 — 뷰티 단과(입시·인터넷 제외) 접수를 기존 채널에 더해 한 번 더 보낸다(2026-10-19).
+  //   입시 = DISCORD_IPSI_SITES 사이트(자매 사이트 포함) 또는 category '미용입시'
+  const dangwaWebhook = !isInternet && !isIpsi && !isIpsiLead ? hook(process.env.DISCORD_WEBHOOK_DANGWA) : undefined
+
   const webhookUrls = isTest
     ? [hook(process.env.DISCORD_WEBHOOK_TEST)].filter((u): u is string => !!u)
-    : [...new Set([webhookUrl, regionWebhook].filter((u): u is string => !!u))]
+    : [...new Set([webhookUrl, regionWebhook, dangwaWebhook].filter((u): u is string => !!u))]
   if (webhookUrls.length) {
     await Promise.all(webhookUrls.map((url) => fetch(url, {
       method: "POST",
