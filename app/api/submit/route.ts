@@ -151,7 +151,8 @@ export async function POST(req: NextRequest) {
                 { name: "성별", value: submission.sex || "-", inline: true },
                 { name: "지역", value: submission.region || "-", inline: true },
                 // 미용입시(뷰티입시·뷰입노트) 폼은 자격증을 받지 않고(항상 N) 목적 칸도 없앴다 — 알림에서 뺀다. DB 에는 그대로 저장된다
-                ...(isIpsiLead ? [] : [{ name: "자격증", value: submission.has_license || "-", inline: true }]),
+                // 자격증은 값을 보낸 폼에서만(2026-10-19 네일·메이크업·헤어 폼에서 뺐다)
+                ...(isIpsiLead || !submission.has_license ? [] : [{ name: "자격증", value: submission.has_license, inline: true }]),
                 { name: "카테고리", value: submission.category || "-", inline: true },
                 // 목적은 값이 있을 때만
                 ...(submission.purpose ? [{ name: "목적", value: submission.purpose, inline: true }] : []),
