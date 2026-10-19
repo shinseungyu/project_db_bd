@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
     purpose: body.purpose ?? "",
     raw_data: body,
   }
+  // 미용입시 리드(프로젝트 3·4 — category '미용입시') — 디스코드 알림에서 자격증·목적 칸을 뺀다
+  const isIpsiLead = submission.category === "미용입시"
 
   const { data, error } = await supabaseAdmin
     .from("submissions")
@@ -148,9 +150,11 @@ export async function POST(req: NextRequest) {
                 { name: "전화번호", value: submission.cellphone || "-", inline: true },
                 { name: "성별", value: submission.sex || "-", inline: true },
                 { name: "지역", value: submission.region || "-", inline: true },
-                { name: "자격증", value: submission.has_license || "-", inline: true },
+                // 미용입시(뷰티입시·뷰입노트) 폼은 자격증을 받지 않고(항상 N) 목적 칸도 없앴다 — 알림에서 뺀다. DB 에는 그대로 저장된다
+                ...(isIpsiLead ? [] : [{ name: "자격증", value: submission.has_license || "-", inline: true }]),
                 { name: "카테고리", value: submission.category || "-", inline: true },
-                { name: "목적", value: submission.purpose || "-", inline: true },
+                // 목적은 값이 있을 때만
+                ...(submission.purpose ? [{ name: "목적", value: submission.purpose, inline: true }] : []),
               ],
               timestamp: new Date().toISOString(),
             }],
