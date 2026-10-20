@@ -219,6 +219,7 @@ export default function AdminPage() {
           </button>
           <a href="/dashboard" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">클라이언트 대시보드</a>
           <a href="/test-dashboard" className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">테스트 대시보드</a>
+          <a href="/settlement" className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600 font-semibold">주간 정산</a>
           <button onClick={() => load(adminId, password)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
         </div>
       </div>
