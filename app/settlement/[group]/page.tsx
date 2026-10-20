@@ -33,6 +33,11 @@ function SettlementView() {
   const [leads, setLeads] = useState<SettlementLead[] | null>(null)
   const [error, setError] = useState("")
   const [week, setWeek] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
+  /** 판매처가 제외 표시를 할 수 있는 주. null = 관리자(전체) */
+  const [editableWeeks, setEditableWeeks] = useState<string[] | null>(null)
+  const [marksReady, setMarksReady] = useState(true)
+  const [busy, setBusy] = useState<string | null>(null)
 
   /** 판매처 키(링크) → 관리자 순으로 시도 */
   const load = useCallback(async (id?: string, pw?: string) => {
@@ -44,6 +49,8 @@ function SettlementView() {
     if (!r.ok) { setError("불러오지 못했습니다."); return }
     const d = await r.json()
     setLeads(d.leads)
+    setEditableWeeks(d.editableWeeks ?? null)
+    setMarksReady(d.marksReady !== false)
     if (key && !id) setKeyOk(true)
     else if (id && pw) {
       setCred({ id, pw })
@@ -51,6 +58,30 @@ function SettlementView() {
       localStorage.setItem("admin_pw", pw)
     }
   }, [group, key])
+
+  const authHeaders = (): Record<string, string> =>
+    cred ? { "x-admin-id": cred.id, "x-admin-password": cred.pw } : { "x-settlement-key": key }
+  const reload = () => (cred ? load(cred.id, cred.pw) : load())
+
+  /** 판매처가 "이미 가진 중복"이라고 알려 온 건을 정산에서 뺀다(되돌리기 가능) */
+  const mark = async (l: SettlementLead, exclude: boolean) => {
+    let reason = ""
+    if (exclude) {
+      const input = window.prompt(`${l.name || "이름 없음"} (${fmtPhone(l.phone)}) 을(를) 정산에서 제외합니다.\n사유를 적어 주세요 (예: 기존 보유 DB)`, "기존 보유 중복")
+      if (input === null) return
+      reason = input.trim()
+    } else if (!window.confirm(`${l.name || "이름 없음"} (${fmtPhone(l.phone)}) 을(를) 다시 정산에 포함할까요?`)) return
+    setBusy(l.id)
+    const r = await fetch("/api/settlement", {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ group, id: l.id, exclude, reason }),
+    })
+    setBusy(null)
+    if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error ?? "처리하지 못했습니다."); return }
+    await reload()
+  }
+  const canEdit = (l: SettlementLead) => marksReady && (editableWeeks === null || editableWeeks.includes(l.week))
 
   useEffect(() => {
     if (key) { load(); return }
@@ -85,6 +116,10 @@ function SettlementView() {
   const inWeek = (leads ?? []).filter((l) => l.week === selected)
   const valid = inWeek.filter((l) => !l.excluded)
   const excluded = inWeek.filter((l) => l.excluded)
+  const q = query.replace(/\s|-/g, "")
+  const hit = (l: SettlementLead) => !q || l.name.replace(/\s/g, "").includes(q) || l.phone.includes(q)
+  const validShown = valid.filter(hit)
+  const excludedShown = excluded.filter(hit)
 
   const downloadCsv = () => {
     const g = GROUPS.find((x) => x.id === group)!
@@ -100,7 +135,7 @@ function SettlementView() {
 
   const copySummary = async () => {
     const g = GROUPS.find((x) => x.id === group)!
-    const text = `[${g.label} 정산] ${weekLabel(selected)}\n유효 ${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}\n(중복 ${excluded.filter((l) => l.excluded?.reason === "중복").length}건 제외)`
+    const text = `[${g.label} 정산] ${weekLabel(selected)}\n유효 ${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}\n(중복 ${excluded.filter((l) => l.excluded?.reason === "중복").length}건 · 판매처 제외 ${excluded.filter((l) => l.excluded?.reason === "판매처 제외").length}건 제외)`
     await navigator.clipboard.writeText(text)
     alert("정산 요약을 복사했습니다.\n\n" + text)
   }
@@ -181,7 +216,18 @@ function SettlementView() {
             <div className="flex gap-2">
               <button onClick={downloadCsv} disabled={!valid.length} className="text-sm bg-gray-900 text-white px-4 py-2 rounded-xl disabled:opacity-40">명단 CSV 다운로드</button>
               <button onClick={copySummary} className="text-sm bg-white border px-4 py-2 rounded-xl hover:bg-gray-50">정산 요약 복사</button>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="이름 또는 번호로 찾기"
+                className="ml-auto w-56 text-sm border rounded-xl px-3 py-2"
+              />
             </div>
+            <p className="text-xs text-gray-500">
+              이미 가지고 있는 중복 DB 는 해당 줄의 <b>중복 제외</b> 를 누르면 정산에서 빠집니다(되돌리기 가능).
+              {editableWeeks && " 지난주·이번 주 접수만 바꿀 수 있습니다."}
+              {!marksReady && <span className="text-red-500"> 제외 표시 기능 준비 중(DB 설정 필요).</span>}
+            </p>
 
             <div className="bg-white rounded-2xl border overflow-x-auto">
               <table className="w-full text-sm">
@@ -194,31 +240,39 @@ function SettlementView() {
                     <th className="px-4 py-3">연락처</th>
                     <th className="px-4 py-3">생년월일</th>
                     <th className="px-4 py-3">지역</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {valid.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">이 주에는 유효 접수가 없습니다.</td></tr>}
-                  {valid.map((l, i) => (
+                  {validShown.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">{q ? "찾는 접수가 없습니다." : "이 주에는 유효 접수가 없습니다."}</td></tr>}
+                  {validShown.map((l, i) => (
                     <tr key={l.id} className="border-b">
-                      <td className="px-4 py-2.5 text-gray-400">{valid.length - i}</td>
+                      <td className="px-4 py-2.5 text-gray-400">{validShown.length - i}</td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">{fmt(l.created_at)}</td>
                       <td className="px-4 py-2.5 text-xs">{l.site}</td>
                       <td className="px-4 py-2.5 font-medium">{l.name || "-"}</td>
                       <td className="px-4 py-2.5">{fmtPhone(l.phone)}</td>
                       <td className="px-4 py-2.5 text-gray-500">{l.birthday || "-"}</td>
                       <td className="px-4 py-2.5 text-gray-500">{l.region}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {canEdit(l) && (
+                          <button onClick={() => mark(l, true)} disabled={busy === l.id} className="text-xs border border-red-200 text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-40 whitespace-nowrap">
+                            {busy === l.id ? "처리 중..." : "중복 제외"}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {excluded.length > 0 && (
+            {excludedShown.length > 0 && (
               <div className="bg-white rounded-2xl border overflow-x-auto">
                 <p className="px-4 pt-4 pb-2 text-sm font-bold text-gray-700">정산 제외 {excluded.length}건</p>
                 <table className="w-full text-sm">
                   <tbody>
-                    {excluded.map((l) => (
+                    {excludedShown.map((l) => (
                       <tr key={l.id} className="border-t text-gray-500">
                         <td className="px-4 py-2.5 text-xs">{fmt(l.created_at)}</td>
                         <td className="px-4 py-2.5 text-xs">{l.site}</td>
@@ -226,8 +280,18 @@ function SettlementView() {
                         <td className="px-4 py-2.5">{fmtPhone(l.phone) || "-"}</td>
                         <td className="px-4 py-2.5">
                           <span className="text-xs font-semibold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">{l.excluded!.reason}</span>
-                          {l.excluded!.firstAt && (
+                          {l.excluded!.reason === "중복" && (
                             <span className="ml-2 text-xs text-gray-400">처음 접수 {fmt(l.excluded!.firstAt)} · {l.excluded!.firstSite}</span>
+                          )}
+                          {(l.excluded!.reason === "판매처 제외" || l.excluded!.reason === "관리자 제외") && (
+                            <span className="ml-2 text-xs text-gray-400">{l.excluded!.note || "사유 없음"} · {fmt(l.excluded!.at)}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {(l.excluded!.reason === "판매처 제외" || l.excluded!.reason === "관리자 제외") && canEdit(l) && (
+                            <button onClick={() => mark(l, false)} disabled={busy === l.id} className="text-xs border px-2.5 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                              되돌리기
+                            </button>
                           )}
                         </td>
                       </tr>

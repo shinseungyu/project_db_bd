@@ -58,5 +58,23 @@ export type SettlementLead = {
   sex: string
   region: string
   /** 정산에서 빠지는 이유. null 이면 유효 */
-  excluded: null | { reason: "중복" | "번호 오류"; firstAt?: string; firstSite?: string }
+  excluded: null | Exclusion
+}
+
+/**
+ * 제외 사유
+ *  - 중복 / 번호 오류: 자동 판정
+ *  - 판매처 제외 / 관리자 제외: 사람이 표시(settlement_exclusions 테이블) — 판매처가 "이미 가진 중복"이라고 알려 온 건
+ */
+export type Exclusion =
+  | { reason: "중복"; firstAt: string; firstSite: string }
+  | { reason: "번호 오류" }
+  | { reason: "판매처 제외" | "관리자 제외"; note: string; at: string }
+
+/** 판매처가 직접 제외 표시를 할 수 있는 주 — 지난주(정산 대상)·이번 주. 관리자는 제한 없음 */
+export function buyerEditableWeeks(now = new Date()): string[] {
+  const thisWeek = weekKey(now.toISOString())
+  const [y, m, d] = thisWeek.split("-").map(Number)
+  const lastWeek = new Date(Date.UTC(y, m - 1, d - 7)).toISOString().slice(0, 10)
+  return [lastWeek, thisWeek]
 }
