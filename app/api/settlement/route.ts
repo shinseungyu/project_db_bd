@@ -38,16 +38,19 @@ type Row = {
 
 const SELECT = "id, name, birthday, cellphone, sex, region, category, created_at, sites(*)"
 
-/** 정산 대상이면 그 그룹, 아니면 null (인터넷·테스트·비수도권) */
+const kindOf = (r: Row): "입시" | "단과" => (r.category === "미용입시" || IPSI_SITES.includes(r.sites?.name ?? "") ? "입시" : "단과")
+
+/** 정산 대상이면 그 그룹, 아니면 null (인터넷·이름 "테스트"·지역 미입력) */
 function groupOf(r: Row): GroupId | null {
   if (verticalOf(r.sites) === "internet") return null
   if ((r.name ?? "").trim() === "테스트") return null
-  if (!isMetro(r.region)) return null
-  return r.category === "미용입시" || IPSI_SITES.includes(r.sites?.name ?? "") ? "ipsi" : "dangwa"
+  if (!(r.region ?? "").trim()) return null
+  if (!isMetro(r.region)) return "local" // 지방은 입시·단과를 한 그룹으로
+  return kindOf(r) === "입시" ? "ipsi" : "dangwa"
 }
 
 /**
- * 주간 정산 데이터 — ?group=ipsi|dangwa 한 판매처의 수도권 접수만, 중복·제외 표시를 붙여 돌려준다.
+ * 주간 정산 데이터 — ?group=ipsi|dangwa|local 한 판매처의 접수만, 중복·제외 표시를 붙여 돌려준다.
  * 두 판매처는 서로의 데이터를 보면 안 되므로 한 번에 한 그룹만 내려준다.
  * 열람: 관리자(x-admin-id/x-admin-password) 또는 그 판매처 키(x-settlement-key = 환경변수 SETTLEMENT_KEY_*).
  * 규칙은 lib/settlement.ts.
@@ -120,6 +123,7 @@ export async function GET(req: NextRequest) {
       created_at: r.created_at,
       week: weekKey(r.created_at),
       group,
+      kind: kindOf(r),
       site: siteName,
       name: r.name ?? "",
       phone,

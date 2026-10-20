@@ -3,7 +3,7 @@
 
 create table if not exists settlement_exclusions (
   submission_id uuid primary key references submissions(id) on delete cascade,
-  grp text not null check (grp in ('ipsi', 'dangwa')),
+  grp text not null check (grp in ('ipsi', 'dangwa', 'local')),
   reason text not null default '',
   marked_by text not null check (marked_by in ('buyer', 'admin')),
   created_at timestamptz not null default now()

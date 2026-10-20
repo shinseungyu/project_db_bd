@@ -9,7 +9,7 @@ const fmt = (iso: string) => new Date(iso).toLocaleString("ko-KR", { month: "2-d
 const fmtPhone = (p: string) => (p.length === 11 ? `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}` : p)
 
 /**
- * 판매처 한 곳의 주간 정산 — /settlement/ipsi · /settlement/dangwa. 두 판매처는 서로의 데이터를 보면 안 되므로
+ * 판매처 한 곳의 주간 정산 — /settlement/ipsi · /settlement/dangwa · /settlement/local. 판매처끼리 서로의 데이터를 보면 안 되므로
  * 페이지·데이터(/api/settlement?group=)를 판매처별로 완전히 나눈다. 규칙은 lib/settlement.ts.
  * 열람: ?key=판매처 키(그 판매처만) 또는 관리자 로그인.
  */
@@ -155,9 +155,9 @@ function SettlementView() {
 
   const downloadCsv = () => {
     const g = GROUPS.find((x) => x.id === group)!
-    const header = ["No", "접수일시", "사이트", "이름", "연락처", "생년월일", "성별", "지역"]
-    const rows = [...valid].reverse().map((l, i) => [String(i + 1), new Date(l.created_at).toLocaleString("ko-KR"), l.site, l.name, fmtPhone(l.phone), l.birthday, l.sex, l.region])
-    const total = ["", "", "", "", "", "", "합계", `${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}`]
+    const header = ["No", "접수일시", "구분", "사이트", "이름", "연락처", "생년월일", "성별", "지역"]
+    const rows = [...valid].reverse().map((l, i) => [String(i + 1), new Date(l.created_at).toLocaleString("ko-KR"), l.kind, l.site, l.name, fmtPhone(l.phone), l.birthday, l.sex, l.region])
+    const total = ["", "", "", "", "", "", "", "합계", `${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}`]
     const csv = [header, ...rows, total].map((r) => r.map((c) => `"${(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")
     const a = document.createElement("a")
     a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }))
@@ -194,7 +194,7 @@ function SettlementView() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">주간 정산 · {GROUPS.find((g) => g.id === group)!.label} <span className="text-base font-semibold text-gray-500">건당 {won(price)}</span></h1>
-          <p className="text-sm text-gray-500 mt-1">매주 월요일, 지난주(월~일) 수도권(서울·경기·인천) 접수 기준. 같은 전화번호는 처음 1건만 유효하고 나머지는 중복으로 제외합니다.</p>
+          <p className="text-sm text-gray-500 mt-1">매주 월요일, 지난주(월~일) 접수 기준 · {GROUPS.find((g) => g.id === group)!.desc}. 같은 전화번호는 처음 1건만 유효하고 나머지는 중복으로 제외합니다.</p>
         </div>
         <div className="flex gap-2">
           {role === "admin" && <a href="/settlement" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 정산 폴더</a>}
@@ -268,6 +268,7 @@ function SettlementView() {
                   <tr className="border-b bg-gray-50 text-left text-gray-600">
                     <th className="px-4 py-3">No</th>
                     <th className="px-4 py-3">접수일시</th>
+                    {group === "local" && <th className="px-4 py-3">구분</th>}
                     <th className="px-4 py-3">사이트</th>
                     <th className="px-4 py-3">이름</th>
                     <th className="px-4 py-3">연락처</th>
@@ -277,11 +278,16 @@ function SettlementView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {validShown.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">{q ? "찾는 접수가 없습니다." : "이 주에는 유효 접수가 없습니다."}</td></tr>}
+                  {validShown.length === 0 && <tr><td colSpan={group === "local" ? 9 : 8} className="px-4 py-8 text-center text-gray-400">{q ? "찾는 접수가 없습니다." : "이 주에는 유효 접수가 없습니다."}</td></tr>}
                   {validShown.map((l, i) => (
                     <tr key={l.id} className="border-b">
                       <td className="px-4 py-2.5 text-gray-400">{validShown.length - i}</td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">{fmt(l.created_at)}</td>
+                      {group === "local" && (
+                        <td className="px-4 py-2.5">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${l.kind === "입시" ? "bg-pink-50 text-pink-600" : "bg-sky-50 text-sky-700"}`}>{l.kind}</span>
+                        </td>
+                      )}
                       <td className="px-4 py-2.5 text-xs">{l.site}</td>
                       <td className="px-4 py-2.5 font-medium">
                         {l.name || "-"}

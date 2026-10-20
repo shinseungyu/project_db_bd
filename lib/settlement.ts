@@ -1,20 +1,21 @@
 /**
  * 주간 정산 규칙 — /settlement 페이지와 /api/settlement 가 같이 쓴다. 단가·구분을 바꾸려면 여기만 고친다.
  *
- * - 판매처(그룹)별로 따로 정산한다. 수도권(서울·경기·인천) 접수만 대상.
+ * - 판매처(그룹)별로 따로 정산한다. 수도권(서울·경기·인천)은 입시·단과로, 그 외 지역은 지방 하나로 묶는다(지역 미입력은 제외).
  * - 주 = 월요일 00:00 ~ 일요일 23:59 (한국 시간). 매주 월요일에 지난주를 정산한다.
  * - 중복 = 같은 그룹에서 같은 전화번호가 이전에 이미 정산 대상으로 들어온 경우(주가 달라도). 처음 1건만 유효.
  * - 제외: 인터넷 업종 사이트, 이름이 "테스트"인 접수, 번호가 10~11자리가 아닌 접수.
  */
 
-export type GroupId = "ipsi" | "dangwa"
+export type GroupId = "ipsi" | "dangwa" | "local"
 
 export const GROUPS: { id: GroupId; label: string; price: number; desc: string }[] = [
   { id: "ipsi", label: "입시 · 수도권", price: 20000, desc: "뷰티입시(beautyip.kr·beautyipsi.kr) · 서울·경기·인천" },
   { id: "dangwa", label: "단과 · 수도권", price: 10000, desc: "네일·메이크업·헤어 등 단과 사이트 · 서울·경기·인천" },
+  { id: "local", label: "지방 · 입시+단과", price: 5000, desc: "서울·경기·인천 외 지역 · 입시·단과 모두(구분 표시)" },
 ]
 
-export const isGroupId = (v: unknown): v is GroupId => v === "ipsi" || v === "dangwa"
+export const isGroupId = (v: unknown): v is GroupId => v === "ipsi" || v === "dangwa" || v === "local"
 
 /**
  * 정산 시작 주(월요일) — 이 주부터 판매처에 넘겼다. 이전 접수는 화면에도, 중복 계산에도 넣지 않는다
@@ -26,7 +27,7 @@ export const SETTLEMENT_START_WEEK = "2026-10-19"
  * 판매처별 열람 키(환경변수) — 두 판매처는 서로의 데이터를 보면 안 된다.
  * /settlement/{group}?key=… 링크로 해당 판매처만 열린다. 키가 없으면 관리자 로그인으로만 볼 수 있다.
  */
-export const GROUP_KEY_ENV: Record<GroupId, string> = { ipsi: "SETTLEMENT_KEY_IPSI", dangwa: "SETTLEMENT_KEY_DANGWA" }
+export const GROUP_KEY_ENV: Record<GroupId, string> = { ipsi: "SETTLEMENT_KEY_IPSI", dangwa: "SETTLEMENT_KEY_DANGWA", local: "SETTLEMENT_KEY_LOCAL" }
 
 /**
  * 판매처 전용 아이디·비번(환경변수) — /settlement/{group} 로그인 화면에서 쓴다. 그 판매처 정산만 열리고
@@ -35,6 +36,7 @@ export const GROUP_KEY_ENV: Record<GroupId, string> = { ipsi: "SETTLEMENT_KEY_IP
 export const GROUP_LOGIN_ENV: Record<GroupId, { id: string; pw: string }> = {
   ipsi: { id: "SETTLEMENT_IPSI_ID", pw: "SETTLEMENT_IPSI_PW" },
   dangwa: { id: "SETTLEMENT_DANGWA_ID", pw: "SETTLEMENT_DANGWA_PW" },
+  local: { id: "SETTLEMENT_LOCAL_ID", pw: "SETTLEMENT_LOCAL_PW" },
 }
 
 /** 입시 사이트 — 카테고리 '미용입시' 이거나 아래 사이트명이면 입시 */
@@ -80,6 +82,8 @@ export type SettlementLead = {
   created_at: string
   week: string
   group: GroupId
+  /** 입시 / 단과 — 지방 정산처럼 둘이 섞인 그룹에서 구분 표시 */
+  kind: "입시" | "단과"
   site: string
   name: string
   phone: string

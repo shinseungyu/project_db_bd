@@ -3,7 +3,7 @@ import { GROUPS } from "@/lib/settlement"
 
 /**
  * 정산 폴더 — 판매처별 페이지로 가는 입구. 두 판매처는 서로의 데이터를 보면 안 되므로 여기서 데이터를 합쳐 보여주지 않는다.
- * 각 판매처 페이지(/settlement/ipsi · /settlement/dangwa)는 관리자 로그인 또는 그 판매처 키 링크로만 열린다.
+ * 각 판매처 페이지(/settlement/ipsi · /settlement/dangwa · /settlement/local)는 관리자 로그인 또는 그 판매처 계정으로만 열린다.
  */
 export default function SettlementIndex() {
   return (
@@ -12,7 +12,7 @@ export default function SettlementIndex() {
         <h1 className="text-2xl font-bold text-gray-800">주간 정산</h1>
         <a href="/admin" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 관리자</a>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         {GROUPS.map((g) => (
           <Link key={g.id} href={`/settlement/${g.id}`} className="block bg-white rounded-2xl border p-6 hover:border-gray-400 transition-colors">
             <div className="text-3xl mb-3" aria-hidden="true">📁</div>
