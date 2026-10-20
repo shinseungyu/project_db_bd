@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
-import { GROUPS, isGroupId, weekKey, weekLabel, type GroupId, type SettlementLead } from "@/lib/settlement"
+import { GROUPS, SETTLEMENT_START_WEEK, isGroupId, weekKey, weekLabel, type GroupId, type SettlementLead } from "@/lib/settlement"
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`
 const fmt = (iso: string) => new Date(iso).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
@@ -112,7 +112,8 @@ function SettlementView() {
   // 주 폴더 — 최신 주가 위. 이번 주·지난주는 접수가 없어도 폴더를 보여준다
   const weeks = useMemo(() => {
     const m = new Map<string, { valid: number; dup: number; bad: number }>()
-    for (const k of [thisWeek, lastWeek]) m.set(k, { valid: 0, dup: 0, bad: 0 })
+    // 정산 시작 주 이전 폴더는 만들지 않는다
+    for (const k of [thisWeek, lastWeek]) if (k >= SETTLEMENT_START_WEEK) m.set(k, { valid: 0, dup: 0, bad: 0 })
     for (const l of leads ?? []) {
       const w = m.get(l.week) ?? { valid: 0, dup: 0, bad: 0 }
       if (!l.excluded) w.valid++
@@ -123,7 +124,7 @@ function SettlementView() {
     return [...m].sort((a, b) => (a[0] < b[0] ? 1 : -1))
   }, [leads, thisWeek, lastWeek])
 
-  const selected = week ?? lastWeek
+  const selected = week ?? (lastWeek >= SETTLEMENT_START_WEEK ? lastWeek : thisWeek)
   const inWeek = (leads ?? []).filter((l) => l.week === selected)
   const valid = inWeek.filter((l) => !l.excluded)
   const excluded = inWeek.filter((l) => l.excluded)

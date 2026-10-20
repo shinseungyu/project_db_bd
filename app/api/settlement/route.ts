@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { verticalOf } from "@/lib/verticals"
 import {
-  GROUP_KEY_ENV, IPSI_SITES, buyerEditableWeeks, isGroupId, isMetro, normPhone, testSuspect, weekKey,
+  GROUP_KEY_ENV, IPSI_SITES, SETTLEMENT_START_WEEK, buyerEditableWeeks, isGroupId, isMetro, normPhone, testSuspect, weekKey,
   type GroupId, type SettlementLead,
 } from "@/lib/settlement"
 
@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
   const leads: SettlementLead[] = []
 
   for (const r of rows) {
+    if (weekKey(r.created_at) < SETTLEMENT_START_WEEK) continue // 정산 시작 전 접수는 보이지도, 중복 계산에도 넣지 않는다
     if (groupOf(r) !== group) continue
     const siteName = r.sites?.name ?? ""
     const phone = normPhone(r.cellphone)

@@ -17,6 +17,12 @@ export const GROUPS: { id: GroupId; label: string; price: number; desc: string }
 export const isGroupId = (v: unknown): v is GroupId => v === "ipsi" || v === "dangwa"
 
 /**
+ * 정산 시작 주(월요일) — 이 주부터 판매처에 넘겼다. 이전 접수는 화면에도, 중복 계산에도 넣지 않는다
+ * (판매처가 받은 적 없는 예전 접수 때문에 새 접수가 중복으로 빠지면 안 된다).
+ */
+export const SETTLEMENT_START_WEEK = "2026-10-19"
+
+/**
  * 판매처별 열람 키(환경변수) — 두 판매처는 서로의 데이터를 보면 안 된다.
  * /settlement/{group}?key=… 링크로 해당 판매처만 열린다. 키가 없으면 관리자 로그인으로만 볼 수 있다.
  */
