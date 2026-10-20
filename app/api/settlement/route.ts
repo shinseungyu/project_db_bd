@@ -68,7 +68,8 @@ export async function GET(req: NextRequest) {
   }
 
   // 사람이 표시한 제외 — 테이블이 아직 없으면(마이그레이션 전) 표시 기능만 꺼진다
-  const marks = new Map<string, { reason: string; marked_by: string; created_at: string }>()
+  // action: exclude(뺌) / include(자동 중복 살림). action 칸이 없던 때의 행은 exclude
+  const marks = new Map<string, { reason: string; marked_by: string; created_at: string; action?: string }>()
   const { data: ex, error: exErr } = await supabaseAdmin.from("settlement_exclusions").select("*").eq("grp", group)
   for (const e of ex ?? []) marks.set(e.submission_id, e)
 
@@ -89,8 +90,16 @@ export async function GET(req: NextRequest) {
       else seen.set(phone, { at: r.created_at, site: siteName })
     }
     const mark = marks.get(r.id)
-    if (!excluded && mark) {
-      excluded = { reason: mark.marked_by === "buyer" ? "판매처 제외" : "관리자 제외", note: mark.reason, at: mark.created_at }
+    const by = mark?.marked_by === "buyer" ? "판매처" : "관리자"
+    let restored: SettlementLead["restored"]
+    if (mark && (mark.action ?? "exclude") === "include") {
+      // 자동 중복만 살릴 수 있다(번호 오류는 그대로 제외)
+      if (excluded?.reason === "중복") {
+        restored = { by, note: mark.reason, at: mark.created_at, firstAt: excluded.firstAt, firstSite: excluded.firstSite }
+        excluded = null
+      }
+    } else if (!excluded && mark) {
+      excluded = { reason: by === "판매처" ? "판매처 제외" : "관리자 제외", note: mark.reason, at: mark.created_at }
     }
 
     leads.push({
@@ -105,6 +114,7 @@ export async function GET(req: NextRequest) {
       sex: r.sex ?? "",
       region: (r.region ?? "").trim(),
       excluded,
+      ...(restored ? { restored } : {}),
     })
   }
 
@@ -120,7 +130,9 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * 제외 표시 / 되돌리기 — body { group, id, exclude: boolean, reason? }
+ * 표시 바꾸기 — body { group, id, action: "exclude" | "include" | "clear", reason? }
+ *   exclude = 정산에서 뺌 / include = 자동 중복을 정산에 다시 넣음(살리기) / clear = 표시 지움(원래 판정으로)
+ *   (예전 형식 { exclude: boolean } 도 받는다)
  * 판매처는 자기 그룹 접수만, 지난주·이번 주만 바꿀 수 있다. 관리자는 제한 없음.
  */
 export async function POST(req: NextRequest) {
@@ -137,16 +149,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "지난주·이번 주 접수만 바꿀 수 있습니다. 이전 주는 관리자에게 요청해 주세요." }, { status: 403 })
   }
 
-  const { error } = body.exclude
-    ? await supabaseAdmin.from("settlement_exclusions").upsert({
-        submission_id: body.id,
-        grp: group,
-        reason: String(body.reason ?? "").slice(0, 200),
-        marked_by: role,
-      })
-    : await supabaseAdmin.from("settlement_exclusions").delete().eq("submission_id", body.id).eq("grp", group)
+  const action: "exclude" | "include" | "clear" =
+    body.action === "exclude" || body.action === "include" || body.action === "clear" ? body.action : body.exclude ? "exclude" : "clear"
+  const row = { submission_id: body.id, grp: group, reason: String(body.reason ?? "").slice(0, 200), marked_by: role }
+  let error
+  if (action === "clear") {
+    ;({ error } = await supabaseAdmin.from("settlement_exclusions").delete().eq("submission_id", body.id).eq("grp", group))
+  } else {
+    ;({ error } = await supabaseAdmin.from("settlement_exclusions").upsert({ ...row, action }))
+    // action 칸이 없는 DB(2026-10-20_settlement_include.sql 실행 전) — 제외는 예전 방식으로 저장
+    if (error && action === "exclude" && /action/.test(error.message)) {
+      ;({ error } = await supabaseAdmin.from("settlement_exclusions").upsert(row))
+    }
+  }
   if (error) {
-    const hint = /settlement_exclusions/.test(error.message) ? " (supabase/2026-10-20_settlement_exclusions.sql 을 먼저 실행해야 합니다)" : ""
+    const hint = /action/.test(error.message)
+      ? " (살리기는 supabase/2026-10-20_settlement_include.sql 을 먼저 실행해야 합니다)"
+      : /settlement_exclusions/.test(error.message) ? " (supabase/2026-10-20_settlement_exclusions.sql 을 먼저 실행해야 합니다)" : ""
     return NextResponse.json({ error: error.message + hint }, { status: 500 })
   }
   return NextResponse.json({ ok: true })

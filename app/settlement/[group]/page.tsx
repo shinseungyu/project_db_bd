@@ -63,19 +63,30 @@ function SettlementView() {
     cred ? { "x-admin-id": cred.id, "x-admin-password": cred.pw } : { "x-settlement-key": key }
   const reload = () => (cred ? load(cred.id, cred.pw) : load())
 
-  /** 판매처가 "이미 가진 중복"이라고 알려 온 건을 정산에서 뺀다(되돌리기 가능) */
-  const mark = async (l: SettlementLead, exclude: boolean) => {
+  /**
+   * 표시 바꾸기
+   *  exclude = 판매처가 "이미 가진 중복"이라고 알려 온 건을 정산에서 뺀다
+   *  include = 자동 중복이지만 정산에 다시 넣는다(살리기)
+   *  clear   = 표시를 지우고 원래 판정으로(되돌리기 · 다시 제외)
+   */
+  const act = async (l: SettlementLead, action: "exclude" | "include" | "clear") => {
+    const who = `${l.name || "이름 없음"} (${fmtPhone(l.phone)})`
     let reason = ""
-    if (exclude) {
-      const input = window.prompt(`${l.name || "이름 없음"} (${fmtPhone(l.phone)}) 을(를) 정산에서 제외합니다.\n사유를 적어 주세요 (예: 기존 보유 DB)`, "기존 보유 중복")
+    if (action === "exclude" || action === "include") {
+      const input = window.prompt(
+        action === "exclude"
+          ? `${who} 을(를) 정산에서 제외합니다.\n사유를 적어 주세요 (예: 기존 보유 DB)`
+          : `${who} 은(는) 같은 번호가 이전에 들어와 자동으로 중복 처리된 건입니다.\n정산에 다시 포함할까요? 사유를 적어 주세요`,
+        action === "exclude" ? "기존 보유 중복" : "중복 아님(재접수 인정)",
+      )
       if (input === null) return
       reason = input.trim()
-    } else if (!window.confirm(`${l.name || "이름 없음"} (${fmtPhone(l.phone)}) 을(를) 다시 정산에 포함할까요?`)) return
+    } else if (!window.confirm(l.restored ? `${who} 을(를) 다시 중복으로 제외할까요?` : `${who} 을(를) 다시 정산에 포함할까요?`)) return
     setBusy(l.id)
     const r = await fetch("/api/settlement", {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ group, id: l.id, exclude, reason }),
+      body: JSON.stringify({ group, id: l.id, action, reason }),
     })
     setBusy(null)
     if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error ?? "처리하지 못했습니다."); return }
@@ -224,7 +235,7 @@ function SettlementView() {
               />
             </div>
             <p className="text-xs text-gray-500">
-              이미 가지고 있는 중복 DB 는 해당 줄의 <b>중복 제외</b> 를 누르면 정산에서 빠집니다(되돌리기 가능).
+              이미 가지고 있는 중복 DB 는 해당 줄의 <b>중복 제외</b> 를 누르면 정산에서 빠집니다(되돌리기 가능). 자동으로 중복 처리된 건은 아래 제외 목록에서 <b>살리기</b> 로 다시 포함할 수 있습니다.
               {editableWeeks && " 지난주·이번 주 접수만 바꿀 수 있습니다."}
               {!marksReady && <span className="text-red-500"> 제외 표시 기능 준비 중(DB 설정 필요).</span>}
             </p>
@@ -250,14 +261,21 @@ function SettlementView() {
                       <td className="px-4 py-2.5 text-gray-400">{validShown.length - i}</td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">{fmt(l.created_at)}</td>
                       <td className="px-4 py-2.5 text-xs">{l.site}</td>
-                      <td className="px-4 py-2.5 font-medium">{l.name || "-"}</td>
+                      <td className="px-4 py-2.5 font-medium">
+                        {l.name || "-"}
+                        {l.restored && (
+                          <span className="ml-1.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded" title={`처음 접수 ${fmt(l.restored.firstAt)} · ${l.restored.firstSite}`}>
+                            살림({l.restored.by}){l.restored.note ? ` · ${l.restored.note}` : ""}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">{fmtPhone(l.phone)}</td>
                       <td className="px-4 py-2.5 text-gray-500">{l.birthday || "-"}</td>
                       <td className="px-4 py-2.5 text-gray-500">{l.region}</td>
                       <td className="px-4 py-2.5 text-right">
                         {canEdit(l) && (
-                          <button onClick={() => mark(l, true)} disabled={busy === l.id} className="text-xs border border-red-200 text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-40 whitespace-nowrap">
-                            {busy === l.id ? "처리 중..." : "중복 제외"}
+                          <button onClick={() => act(l, l.restored ? "clear" : "exclude")} disabled={busy === l.id} className="text-xs border border-red-200 text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-40 whitespace-nowrap">
+                            {busy === l.id ? "처리 중..." : l.restored ? "다시 제외" : "중복 제외"}
                           </button>
                         )}
                       </td>
@@ -289,8 +307,13 @@ function SettlementView() {
                         </td>
                         <td className="px-4 py-2.5 text-right">
                           {(l.excluded!.reason === "판매처 제외" || l.excluded!.reason === "관리자 제외") && canEdit(l) && (
-                            <button onClick={() => mark(l, false)} disabled={busy === l.id} className="text-xs border px-2.5 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                            <button onClick={() => act(l, "clear")} disabled={busy === l.id} className="text-xs border px-2.5 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
                               되돌리기
+                            </button>
+                          )}
+                          {l.excluded!.reason === "중복" && canEdit(l) && (
+                            <button onClick={() => act(l, "include")} disabled={busy === l.id} className="text-xs border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg hover:bg-emerald-50 disabled:opacity-40 whitespace-nowrap">
+                              살리기
                             </button>
                           )}
                         </td>

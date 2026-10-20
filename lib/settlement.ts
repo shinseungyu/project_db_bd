@@ -59,6 +59,8 @@ export type SettlementLead = {
   region: string
   /** 정산에서 빠지는 이유. null 이면 유효 */
   excluded: null | Exclusion
+  /** 자동 중복이었지만 사람이 "살리기"로 정산에 다시 넣은 경우 */
+  restored?: { by: "판매처" | "관리자"; note: string; at: string; firstAt: string; firstSite: string }
 }
 
 /**
