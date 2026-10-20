@@ -1,234 +1,28 @@
-"use client"
-
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { GROUPS, weekKey, weekLabel, type GroupId, type SettlementLead } from "@/lib/settlement"
-
-const won = (n: number) => `${n.toLocaleString("ko-KR")}원`
-const fmt = (iso: string) => new Date(iso).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-const fmtPhone = (p: string) => (p.length === 11 ? `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}` : p)
+import Link from "next/link"
+import { GROUPS } from "@/lib/settlement"
 
 /**
- * 주간 정산 — 판매처(입시·단과)별 주 폴더. 규칙은 lib/settlement.ts, 데이터는 /api/settlement(읽기 전용).
- * 매주 월요일에 "정산 대상"(지난주) 폴더를 열어 유효 건수·금액을 확인하고 명단을 CSV 로 보낸다.
+ * 정산 폴더 — 판매처별 페이지로 가는 입구. 두 판매처는 서로의 데이터를 보면 안 되므로 여기서 데이터를 합쳐 보여주지 않는다.
+ * 각 판매처 페이지(/settlement/ipsi · /settlement/dangwa)는 관리자 로그인 또는 그 판매처 키 링크로만 열린다.
  */
-export default function SettlementPage() {
-  const [cred, setCred] = useState<{ id: string; pw: string } | null>(null)
-  const [form, setForm] = useState({ id: "", pw: "" })
-  const [leads, setLeads] = useState<SettlementLead[] | null>(null)
-  const [error, setError] = useState("")
-  const [group, setGroup] = useState<GroupId>("ipsi")
-  const [week, setWeek] = useState<string | null>(null)
-
-  const load = useCallback(async (id: string, pw: string) => {
-    setError("")
-    const r = await fetch("/api/settlement", { headers: { "x-admin-id": id, "x-admin-password": pw } })
-    if (r.status === 401) { setError("아이디 또는 비밀번호가 틀렸습니다."); setCred(null); return }
-    if (!r.ok) { setError("불러오지 못했습니다."); return }
-    const d = await r.json()
-    setLeads(d.leads)
-    setCred({ id, pw })
-    localStorage.setItem("admin_id", id)
-    localStorage.setItem("admin_pw", pw)
-  }, [])
-
-  useEffect(() => {
-    const id = localStorage.getItem("admin_id")
-    const pw = localStorage.getItem("admin_pw")
-    if (id && pw) load(id, pw)
-  }, [load])
-
-  const thisWeek = weekKey(new Date().toISOString())
-  const lastWeek = (() => {
-    const [y, m, d] = thisWeek.split("-").map(Number)
-    return new Date(Date.UTC(y, m - 1, d - 7)).toISOString().slice(0, 10)
-  })()
-
-  const price = GROUPS.find((g) => g.id === group)!.price
-
-  // 주 폴더 — 최신 주가 위. 이번 주·지난주는 접수가 없어도 폴더를 보여준다
-  const weeks = useMemo(() => {
-    const m = new Map<string, { valid: number; dup: number; bad: number }>()
-    for (const k of [thisWeek, lastWeek]) m.set(k, { valid: 0, dup: 0, bad: 0 })
-    for (const l of leads ?? []) {
-      if (l.group !== group) continue
-      const w = m.get(l.week) ?? { valid: 0, dup: 0, bad: 0 }
-      if (!l.excluded) w.valid++
-      else if (l.excluded.reason === "중복") w.dup++
-      else w.bad++
-      m.set(l.week, w)
-    }
-    return [...m].sort((a, b) => (a[0] < b[0] ? 1 : -1))
-  }, [leads, group, thisWeek, lastWeek])
-
-  const selected = week ?? lastWeek
-  const inWeek = (leads ?? []).filter((l) => l.group === group && l.week === selected)
-  const valid = inWeek.filter((l) => !l.excluded)
-  const excluded = inWeek.filter((l) => l.excluded)
-
-  const downloadCsv = () => {
-    const g = GROUPS.find((x) => x.id === group)!
-    const header = ["No", "접수일시", "사이트", "이름", "연락처", "생년월일", "성별", "지역"]
-    const rows = [...valid].reverse().map((l, i) => [String(i + 1), new Date(l.created_at).toLocaleString("ko-KR"), l.site, l.name, fmtPhone(l.phone), l.birthday, l.sex, l.region])
-    const total = ["", "", "", "", "", "", "합계", `${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}`]
-    const csv = [header, ...rows, total].map((r) => r.map((c) => `"${(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }))
-    a.download = `정산_${g.label.replace(/\s|·/g, "")}_${selected}.csv`
-    a.click()
-  }
-
-  const copySummary = async () => {
-    const g = GROUPS.find((x) => x.id === group)!
-    const text = `[${g.label} 정산] ${weekLabel(selected)}\n유효 ${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}\n(중복 ${excluded.filter((l) => l.excluded?.reason === "중복").length}건 제외)`
-    await navigator.clipboard.writeText(text)
-    alert("정산 요약을 복사했습니다.\n\n" + text)
-  }
-
-  if (!cred) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <form onSubmit={(e) => { e.preventDefault(); load(form.id, form.pw) }} className="bg-white rounded-2xl shadow p-10 w-full max-w-sm space-y-4">
-          <h1 className="text-xl font-bold text-gray-800">주간 정산</h1>
-          <input placeholder="관리자 아이디" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} className="w-full border rounded-xl px-4 py-3 text-sm" />
-          <input type="password" placeholder="비밀번호" value={form.pw} onChange={(e) => setForm({ ...form, pw: e.target.value })} className="w-full border rounded-xl px-4 py-3 text-sm" />
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button type="submit" className="w-full py-3 bg-gray-900 text-white rounded-xl font-semibold">로그인</button>
-        </form>
-      </div>
-    )
-  }
-
+export default function SettlementIndex() {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">주간 정산</h1>
-          <p className="text-sm text-gray-500 mt-1">매주 월요일, 지난주(월~일) 수도권(서울·경기·인천) 접수 기준. 같은 전화번호는 처음 1건만 유효하고 나머지는 중복으로 제외합니다.</p>
-        </div>
-        <div className="flex gap-2">
-          <a href="/admin" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 관리자</a>
-          <button onClick={() => load(cred.id, cred.pw)} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
-        </div>
+    <div className="max-w-3xl mx-auto px-4 py-10">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-bold text-gray-800">주간 정산</h1>
+        <a href="/admin" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 관리자</a>
       </div>
-
-      {/* 판매처 탭 */}
-      <div className="flex gap-2 mb-6">
+      <div className="grid gap-4 sm:grid-cols-2">
         {GROUPS.map((g) => (
-          <button
-            key={g.id}
-            onClick={() => { setGroup(g.id); setWeek(null) }}
-            className={`px-5 py-3 rounded-2xl text-left border transition-all ${group === g.id ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 hover:border-gray-400"}`}
-          >
-            <div className="font-bold">{g.label} · 건당 {won(g.price)}</div>
-            <div className={`text-xs mt-0.5 ${group === g.id ? "text-white/70" : "text-gray-400"}`}>{g.desc}</div>
-          </button>
+          <Link key={g.id} href={`/settlement/${g.id}`} className="block bg-white rounded-2xl border p-6 hover:border-gray-400 transition-colors">
+            <div className="text-3xl mb-3" aria-hidden="true">📁</div>
+            <div className="font-bold text-gray-800">{g.label}</div>
+            <div className="text-sm text-gray-500 mt-1">건당 {g.price.toLocaleString("ko-KR")}원</div>
+            <div className="text-xs text-gray-400 mt-2">{g.desc}</div>
+          </Link>
         ))}
       </div>
-
-      {!leads ? (
-        <p className="text-gray-400">불러오는 중...</p>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          {/* 주 폴더 */}
-          <div className="bg-white rounded-2xl border p-3 space-y-1 self-start">
-            {weeks.map(([k, w]) => (
-              <button
-                key={k}
-                onClick={() => setWeek(k)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-3 ${selected === k ? "bg-gray-100" : "hover:bg-gray-50"}`}
-              >
-                <span className="text-xl" aria-hidden="true">{selected === k ? "📂" : "📁"}</span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-semibold text-gray-800">
-                    {weekLabel(k)}
-                    {k === lastWeek && <span className="ml-1.5 text-[10px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded">정산 대상</span>}
-                    {k === thisWeek && <span className="ml-1.5 text-[10px] font-bold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">진행 중</span>}
-                  </span>
-                  <span className="block text-xs text-gray-500">
-                    유효 {w.valid}건 · {won(w.valid * price)}{w.dup ? ` · 중복 ${w.dup}` : ""}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* 선택한 주 */}
-          <div className="space-y-4 min-w-0">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                ["기간", weekLabel(selected)],
-                ["유효 건수", `${valid.length}건`],
-                ["정산 금액", won(valid.length * price)],
-                ["제외", `${excluded.length}건`],
-              ].map(([k, v]) => (
-                <div key={k} className="bg-white rounded-2xl border p-4">
-                  <div className="text-xs text-gray-500">{k}</div>
-                  <div className={`mt-1 font-bold ${k === "정산 금액" ? "text-xl text-orange-600" : "text-lg text-gray-800"}`}>{v}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={downloadCsv} disabled={!valid.length} className="text-sm bg-gray-900 text-white px-4 py-2 rounded-xl disabled:opacity-40">명단 CSV 다운로드</button>
-              <button onClick={copySummary} className="text-sm bg-white border px-4 py-2 rounded-xl hover:bg-gray-50">정산 요약 복사</button>
-            </div>
-
-            <div className="bg-white rounded-2xl border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-left text-gray-600">
-                    <th className="px-4 py-3">No</th>
-                    <th className="px-4 py-3">접수일시</th>
-                    <th className="px-4 py-3">사이트</th>
-                    <th className="px-4 py-3">이름</th>
-                    <th className="px-4 py-3">연락처</th>
-                    <th className="px-4 py-3">생년월일</th>
-                    <th className="px-4 py-3">지역</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {valid.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">이 주에는 유효 접수가 없습니다.</td></tr>}
-                  {valid.map((l, i) => (
-                    <tr key={l.id} className="border-b">
-                      <td className="px-4 py-2.5 text-gray-400">{valid.length - i}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-xs">{fmt(l.created_at)}</td>
-                      <td className="px-4 py-2.5 text-xs">{l.site}</td>
-                      <td className="px-4 py-2.5 font-medium">{l.name || "-"}</td>
-                      <td className="px-4 py-2.5">{fmtPhone(l.phone)}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{l.birthday || "-"}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{l.region}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {excluded.length > 0 && (
-              <div className="bg-white rounded-2xl border overflow-x-auto">
-                <p className="px-4 pt-4 pb-2 text-sm font-bold text-gray-700">정산 제외 {excluded.length}건</p>
-                <table className="w-full text-sm">
-                  <tbody>
-                    {excluded.map((l) => (
-                      <tr key={l.id} className="border-t text-gray-500">
-                        <td className="px-4 py-2.5 text-xs">{fmt(l.created_at)}</td>
-                        <td className="px-4 py-2.5 text-xs">{l.site}</td>
-                        <td className="px-4 py-2.5">{l.name || "-"}</td>
-                        <td className="px-4 py-2.5">{fmtPhone(l.phone) || "-"}</td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-xs font-semibold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">{l.excluded!.reason}</span>
-                          {l.excluded!.firstAt && (
-                            <span className="ml-2 text-xs text-gray-400">처음 접수 {fmt(l.excluded!.firstAt)} · {l.excluded!.firstSite}</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <p className="text-xs text-gray-400 mt-6">판매처마다 데이터가 완전히 분리돼 있습니다. 판매처에는 각자의 링크(키 포함)만 전달하세요.</p>
     </div>
   )
 }

@@ -14,6 +14,14 @@ export const GROUPS: { id: GroupId; label: string; price: number; desc: string }
   { id: "dangwa", label: "단과 · 수도권", price: 10000, desc: "네일·메이크업·헤어 등 단과 사이트 · 서울·경기·인천" },
 ]
 
+export const isGroupId = (v: unknown): v is GroupId => v === "ipsi" || v === "dangwa"
+
+/**
+ * 판매처별 열람 키(환경변수) — 두 판매처는 서로의 데이터를 보면 안 된다.
+ * /settlement/{group}?key=… 링크로 해당 판매처만 열린다. 키가 없으면 관리자 로그인으로만 볼 수 있다.
+ */
+export const GROUP_KEY_ENV: Record<GroupId, string> = { ipsi: "SETTLEMENT_KEY_IPSI", dangwa: "SETTLEMENT_KEY_DANGWA" }
+
 /** 입시 사이트 — 카테고리 '미용입시' 이거나 아래 사이트명이면 입시 */
 export const IPSI_SITES = ["beautyip.kr", "beautyipsi.kr"]
 

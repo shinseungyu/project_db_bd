@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { verticalOf } from "@/lib/verticals"
-import { IPSI_SITES, isMetro, normPhone, weekKey, type GroupId, type SettlementLead } from "@/lib/settlement"
+import { GROUP_KEY_ENV, IPSI_SITES, isGroupId, isMetro, normPhone, weekKey, type GroupId, type SettlementLead } from "@/lib/settlement"
 
 function isAdmin(req: NextRequest) {
   return (
@@ -23,11 +23,17 @@ type Row = {
 }
 
 /**
- * 주간 정산 데이터 — 수도권 접수를 그룹(입시/단과)별로 나누고 중복을 표시해 돌려준다. 읽기 전용, 관리자 전용.
+ * 주간 정산 데이터 — ?group=ipsi|dangwa 한 판매처의 수도권 접수만, 중복을 표시해 돌려준다. 읽기 전용.
+ * 두 판매처는 서로의 데이터를 보면 안 되므로 한 번에 한 그룹만 내려준다.
+ * 열람: 관리자(x-admin-id/x-admin-password) 또는 그 판매처 키(x-settlement-key = 환경변수 SETTLEMENT_KEY_*).
  * 규칙은 lib/settlement.ts.
  */
 export async function GET(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+  const group = req.nextUrl.searchParams.get("group")
+  if (!isGroupId(group)) return NextResponse.json({ error: "group required" }, { status: 400 })
+  const groupKey = process.env[GROUP_KEY_ENV[group]]
+  const keyOk = !!groupKey && req.headers.get("x-settlement-key") === groupKey
+  if (!isAdmin(req) && !keyOk) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
 
   // PostgREST 는 한 번에 1000행까지 — 전부 읽을 때까지 나눠 받는다
   const rows: Row[] = []
@@ -42,7 +48,7 @@ export async function GET(req: NextRequest) {
     if (!data || data.length < 1000) break
   }
 
-  const seen: Record<GroupId, Map<string, { at: string; site: string }>> = { ipsi: new Map(), dangwa: new Map() }
+  const seen = new Map<string, { at: string; site: string }>()
   const leads: SettlementLead[] = []
 
   for (const r of rows) {
@@ -51,16 +57,17 @@ export async function GET(req: NextRequest) {
     if ((r.name ?? "").trim() === "테스트") continue
     if (!isMetro(r.region)) continue
 
-    const group: GroupId = r.category === "미용입시" || IPSI_SITES.includes(siteName) ? "ipsi" : "dangwa"
+    const leadGroup: GroupId = r.category === "미용입시" || IPSI_SITES.includes(siteName) ? "ipsi" : "dangwa"
+    if (leadGroup !== group) continue
     const phone = normPhone(r.cellphone)
 
     let excluded: SettlementLead["excluded"] = null
     if (!/^\d{10,11}$/.test(phone)) {
       excluded = { reason: "번호 오류" }
     } else {
-      const first = seen[group].get(phone)
+      const first = seen.get(phone)
       if (first) excluded = { reason: "중복", firstAt: first.at, firstSite: first.site }
-      else seen[group].set(phone, { at: r.created_at, site: siteName })
+      else seen.set(phone, { at: r.created_at, site: siteName })
     }
 
     leads.push({
@@ -78,5 +85,5 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  return NextResponse.json({ leads: leads.reverse(), generatedAt: new Date().toISOString() })
+  return NextResponse.json({ group, leads: leads.reverse(), generatedAt: new Date().toISOString() })
 }
