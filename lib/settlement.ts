@@ -29,6 +29,20 @@ export const isMetro = (region?: string | null) => /^(서울|경기|인천)/.tes
 
 export const normPhone = (v?: string | null) => (v ?? "").replace(/\D/g, "")
 
+/**
+ * 테스트로 의심되는 접수 — 정산·중복 계산에서 뺀다(사람이 "살리기"로 넣을 수 있다). 이유를 돌려주고, 아니면 null.
+ *  - 번호: 국번 뒤 8자리가 모두 같은 숫자(8888-8888) · 연속 숫자(1234-5678 / 8765-4321)
+ *  - 이름: 테스트·test 와 오타(태스트·탱스트·태스틍…), 한글 자판으로 친 "테스트"(xptmxm 계열)
+ */
+export function testSuspect(name?: string | null, phone?: string): string | null {
+  const body = (phone ?? "").slice(-8)
+  if (/^(\d){7}$/.test(body)) return "가짜 번호(같은 숫자 반복)"
+  if (["12345678", "23456789", "87654321", "98765432", "01234567"].includes(body)) return "가짜 번호(연속 숫자)"
+  const n = (name ?? "").replace(/\s/g, "").toLowerCase()
+  if (/test|테스트|^[테태탱텟][스슽]/.test(n) || /^x[a-z]{0,2}ptm/.test(n)) return "테스트 이름"
+  return null
+}
+
 /** 한국 시간 기준 그 주 월요일 날짜(YYYY-MM-DD) */
 export function weekKey(iso: string): string {
   const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000)
@@ -60,7 +74,7 @@ export type SettlementLead = {
   /** 정산에서 빠지는 이유. null 이면 유효 */
   excluded: null | Exclusion
   /** 자동 중복이었지만 사람이 "살리기"로 정산에 다시 넣은 경우 */
-  restored?: { by: "판매처" | "관리자"; note: string; at: string; firstAt: string; firstSite: string }
+  restored?: { by: "판매처" | "관리자"; note: string; at: string; was: "중복" | "테스트 의심"; firstAt?: string; firstSite?: string }
 }
 
 /**
@@ -71,6 +85,7 @@ export type SettlementLead = {
 export type Exclusion =
   | { reason: "중복"; firstAt: string; firstSite: string }
   | { reason: "번호 오류" }
+  | { reason: "테스트 의심"; why: string }
   | { reason: "판매처 제외" | "관리자 제외"; note: string; at: string }
 
 /** 판매처가 직접 제외 표시를 할 수 있는 주 — 지난주(정산 대상)·이번 주. 관리자는 제한 없음 */

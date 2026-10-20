@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { verticalOf } from "@/lib/verticals"
 import {
-  GROUP_KEY_ENV, IPSI_SITES, buyerEditableWeeks, isGroupId, isMetro, normPhone, weekKey,
+  GROUP_KEY_ENV, IPSI_SITES, buyerEditableWeeks, isGroupId, isMetro, normPhone, testSuspect, weekKey,
   type GroupId, type SettlementLead,
 } from "@/lib/settlement"
 
@@ -81,22 +81,30 @@ export async function GET(req: NextRequest) {
     const siteName = r.sites?.name ?? ""
     const phone = normPhone(r.cellphone)
 
+    const mark = marks.get(r.id)
+    const forceInclude = !!mark && (mark.action ?? "exclude") === "include"
+    const suspect = testSuspect(r.name, phone)
+
     let excluded: SettlementLead["excluded"] = null
     if (!/^\d{10,11}$/.test(phone)) {
       excluded = { reason: "번호 오류" }
+    } else if (suspect && !forceInclude) {
+      // 테스트 의심은 중복 계산(seen)에도 넣지 않는다 — 같은 가짜 번호의 첫 접수가 유효로 남지 않게
+      excluded = { reason: "테스트 의심", why: suspect }
     } else {
       const first = seen.get(phone)
       if (first) excluded = { reason: "중복", firstAt: first.at, firstSite: first.site }
       else seen.set(phone, { at: r.created_at, site: siteName })
     }
-    const mark = marks.get(r.id)
     const by = mark?.marked_by === "buyer" ? "판매처" : "관리자"
     let restored: SettlementLead["restored"]
-    if (mark && (mark.action ?? "exclude") === "include") {
-      // 자동 중복만 살릴 수 있다(번호 오류는 그대로 제외)
+    if (forceInclude) {
+      // 살리기 — 자동 중복·테스트 의심만(번호 오류는 그대로 제외)
       if (excluded?.reason === "중복") {
-        restored = { by, note: mark.reason, at: mark.created_at, firstAt: excluded.firstAt, firstSite: excluded.firstSite }
+        restored = { by, note: mark!.reason, at: mark!.created_at, was: "중복", firstAt: excluded.firstAt, firstSite: excluded.firstSite }
         excluded = null
+      } else if (!excluded && suspect) {
+        restored = { by, note: mark!.reason, at: mark!.created_at, was: "테스트 의심" }
       }
     } else if (!excluded && mark) {
       excluded = { reason: by === "판매처" ? "판매처 제외" : "관리자 제외", note: mark.reason, at: mark.created_at }

@@ -76,8 +76,8 @@ function SettlementView() {
       const input = window.prompt(
         action === "exclude"
           ? `${who} 을(를) 정산에서 제외합니다.\n사유를 적어 주세요 (예: 기존 보유 DB)`
-          : `${who} 은(는) 같은 번호가 이전에 들어와 자동으로 중복 처리된 건입니다.\n정산에 다시 포함할까요? 사유를 적어 주세요`,
-        action === "exclude" ? "기존 보유 중복" : "중복 아님(재접수 인정)",
+          : `${who} 은(는) 자동으로 ${l.excluded?.reason === "테스트 의심" ? "테스트 의심" : "중복"} 처리된 건입니다.\n정산에 다시 포함할까요? 사유를 적어 주세요`,
+        action === "exclude" ? "기존 보유 중복" : l.excluded?.reason === "테스트 의심" ? "실제 고객" : "중복 아님(재접수 인정)",
       )
       if (input === null) return
       reason = input.trim()
@@ -146,7 +146,7 @@ function SettlementView() {
 
   const copySummary = async () => {
     const g = GROUPS.find((x) => x.id === group)!
-    const text = `[${g.label} 정산] ${weekLabel(selected)}\n유효 ${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}\n(중복 ${excluded.filter((l) => l.excluded?.reason === "중복").length}건 · 판매처 제외 ${excluded.filter((l) => l.excluded?.reason === "판매처 제외").length}건 제외)`
+    const text = `[${g.label} 정산] ${weekLabel(selected)}\n유효 ${valid.length}건 × ${won(g.price)} = ${won(valid.length * g.price)}\n(중복 ${excluded.filter((l) => l.excluded?.reason === "중복").length}건 · 판매처 제외 ${excluded.filter((l) => l.excluded?.reason === "판매처 제외").length}건 · 테스트 ${excluded.filter((l) => l.excluded?.reason === "테스트 의심").length}건 제외)`
     await navigator.clipboard.writeText(text)
     alert("정산 요약을 복사했습니다.\n\n" + text)
   }
@@ -264,7 +264,7 @@ function SettlementView() {
                       <td className="px-4 py-2.5 font-medium">
                         {l.name || "-"}
                         {l.restored && (
-                          <span className="ml-1.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded" title={`처음 접수 ${fmt(l.restored.firstAt)} · ${l.restored.firstSite}`}>
+                          <span className="ml-1.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded" title={l.restored.firstAt ? `처음 접수 ${fmt(l.restored.firstAt)} · ${l.restored.firstSite}` : `원래 ${l.restored.was}`}>
                             살림({l.restored.by}){l.restored.note ? ` · ${l.restored.note}` : ""}
                           </span>
                         )}
@@ -298,6 +298,9 @@ function SettlementView() {
                         <td className="px-4 py-2.5">{fmtPhone(l.phone) || "-"}</td>
                         <td className="px-4 py-2.5">
                           <span className="text-xs font-semibold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">{l.excluded!.reason}</span>
+                          {l.excluded!.reason === "테스트 의심" && (
+                            <span className="ml-2 text-xs text-gray-400">{l.excluded!.why}</span>
+                          )}
                           {l.excluded!.reason === "중복" && (
                             <span className="ml-2 text-xs text-gray-400">처음 접수 {fmt(l.excluded!.firstAt)} · {l.excluded!.firstSite}</span>
                           )}
@@ -311,7 +314,7 @@ function SettlementView() {
                               되돌리기
                             </button>
                           )}
-                          {l.excluded!.reason === "중복" && canEdit(l) && (
+                          {(l.excluded!.reason === "중복" || l.excluded!.reason === "테스트 의심") && canEdit(l) && (
                             <button onClick={() => act(l, "include")} disabled={busy === l.id} className="text-xs border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg hover:bg-emerald-50 disabled:opacity-40 whitespace-nowrap">
                               살리기
                             </button>
