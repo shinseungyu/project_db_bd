@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { verticalOf } from "@/lib/verticals"
 import {
-  GROUP_KEY_ENV, IPSI_SITES, SETTLEMENT_START_WEEK, buyerEditableWeeks, isGroupId, isMetro, normPhone, testSuspect, weekKey,
+  GROUP_KEY_ENV, GROUP_LOGIN_ENV, IPSI_SITES, SETTLEMENT_START_WEEK, buyerEditableWeeks, isGroupId, isMetro, normPhone, testSuspect, weekKey,
   type GroupId, type SettlementLead,
 } from "@/lib/settlement"
 
@@ -13,11 +13,15 @@ function isAdmin(req: NextRequest) {
   )
 }
 
-/** 관리자 또는 그 판매처 키. 판매처 키로는 자기 그룹만 열린다 */
+/** 관리자 또는 그 판매처(키 링크 · 전용 아이디·비번). 판매처 자격으로는 자기 그룹만 열린다 */
 function who(req: NextRequest, group: GroupId): "admin" | "buyer" | null {
   if (isAdmin(req)) return "admin"
   const groupKey = process.env[GROUP_KEY_ENV[group]]
-  return groupKey && req.headers.get("x-settlement-key") === groupKey ? "buyer" : null
+  if (groupKey && req.headers.get("x-settlement-key") === groupKey) return "buyer"
+  const id = process.env[GROUP_LOGIN_ENV[group].id]
+  const pw = process.env[GROUP_LOGIN_ENV[group].pw]
+  if (id && pw && req.headers.get("x-settlement-id") === id && req.headers.get("x-settlement-pw") === pw) return "buyer"
+  return null
 }
 
 type Row = {

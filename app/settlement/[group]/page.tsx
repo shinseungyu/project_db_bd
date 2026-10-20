@@ -39,11 +39,20 @@ function SettlementView() {
   const [marksReady, setMarksReady] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
 
-  /** 판매처 키(링크) → 관리자 순으로 시도 */
+  /** 관리자 / 판매처(전용 아이디·비번 또는 키 링크) */
+  const [role, setRole] = useState<"admin" | "buyer" | null>(null)
+  /** 판매처 계정은 관리자 계정과 따로 저장한다 — 판매처 기기에 관리자 로그인이 남지 않게 */
+  const buyerStore = `settle_${group}`
+
+  /** 같은 아이디·비번을 관리자·판매처 양쪽으로 보내고, 서버가 맞는 쪽으로 판정한다 */
+  const credHeaders = (id: string, pw: string): Record<string, string> => ({
+    "x-admin-id": id, "x-admin-password": pw, "x-settlement-id": id, "x-settlement-pw": pw,
+  })
+
   const load = useCallback(async (id?: string, pw?: string) => {
     if (!group) return
     setError("")
-    const headers: Record<string, string> = key && !id ? { "x-settlement-key": key } : { "x-admin-id": id ?? "", "x-admin-password": pw ?? "" }
+    const headers: Record<string, string> = key && !id ? { "x-settlement-key": key } : credHeaders(id ?? "", pw ?? "")
     const r = await fetch(`/api/settlement?group=${group}`, { headers })
     if (r.status === 401) { setError(key && !id ? "링크가 올바르지 않습니다." : "아이디 또는 비밀번호가 틀렸습니다."); setCred(null); setKeyOk(false); return }
     if (!r.ok) { setError("불러오지 못했습니다."); return }
@@ -51,16 +60,23 @@ function SettlementView() {
     setLeads(d.leads)
     setEditableWeeks(d.editableWeeks ?? null)
     setMarksReady(d.marksReady !== false)
+    setRole(d.role)
     if (key && !id) setKeyOk(true)
     else if (id && pw) {
       setCred({ id, pw })
-      localStorage.setItem("admin_id", id)
-      localStorage.setItem("admin_pw", pw)
+      localStorage.setItem(d.role === "admin" ? "admin_id" : `${buyerStore}_id`, id)
+      localStorage.setItem(d.role === "admin" ? "admin_pw" : `${buyerStore}_pw`, pw)
     }
-  }, [group, key])
+  }, [group, key, buyerStore])
+
+  const logout = () => {
+    localStorage.removeItem(role === "admin" ? "admin_id" : `${buyerStore}_id`)
+    localStorage.removeItem(role === "admin" ? "admin_pw" : `${buyerStore}_pw`)
+    setCred(null); setKeyOk(false); setLeads(null); setRole(null)
+  }
 
   const authHeaders = (): Record<string, string> =>
-    cred ? { "x-admin-id": cred.id, "x-admin-password": cred.pw } : { "x-settlement-key": key }
+    cred ? credHeaders(cred.id, cred.pw) : { "x-settlement-key": key }
   const reload = () => (cred ? load(cred.id, cred.pw) : load())
 
   /**
@@ -96,10 +112,14 @@ function SettlementView() {
 
   useEffect(() => {
     if (key) { load(); return }
+    // 판매처 계정 → 관리자 계정 순서로 저장된 로그인을 찾는다
+    const bid = localStorage.getItem(`${buyerStore}_id`)
+    const bpw = localStorage.getItem(`${buyerStore}_pw`)
+    if (bid && bpw) { load(bid, bpw); return }
     const id = localStorage.getItem("admin_id")
     const pw = localStorage.getItem("admin_pw")
     if (id && pw) load(id, pw)
-  }, [load, key])
+  }, [load, key, buyerStore])
 
   const thisWeek = weekKey(new Date().toISOString())
   const lastWeek = (() => {
@@ -160,7 +180,7 @@ function SettlementView() {
       <div className="min-h-screen flex items-center justify-center">
         <form onSubmit={(e) => { e.preventDefault(); load(form.id, form.pw) }} className="bg-white rounded-2xl shadow p-10 w-full max-w-sm space-y-4">
           <h1 className="text-xl font-bold text-gray-800">주간 정산 · {GROUPS.find((g) => g.id === group)!.label}</h1>
-          <input placeholder="관리자 아이디" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} className="w-full border rounded-xl px-4 py-3 text-sm" />
+          <input placeholder="아이디" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} className="w-full border rounded-xl px-4 py-3 text-sm" />
           <input type="password" placeholder="비밀번호" value={form.pw} onChange={(e) => setForm({ ...form, pw: e.target.value })} className="w-full border rounded-xl px-4 py-3 text-sm" />
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button type="submit" className="w-full py-3 bg-gray-900 text-white rounded-xl font-semibold">로그인</button>
@@ -177,8 +197,9 @@ function SettlementView() {
           <p className="text-sm text-gray-500 mt-1">매주 월요일, 지난주(월~일) 수도권(서울·경기·인천) 접수 기준. 같은 전화번호는 처음 1건만 유효하고 나머지는 중복으로 제외합니다.</p>
         </div>
         <div className="flex gap-2">
-          {cred && <a href="/settlement" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 정산 폴더</a>}
+          {role === "admin" && <a href="/settlement" className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">← 정산 폴더</a>}
           <button onClick={() => (cred ? load(cred.id, cred.pw) : load())} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">새로고침</button>
+          {cred && <button onClick={logout} className="text-sm bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50">로그아웃</button>}
         </div>
       </div>
 

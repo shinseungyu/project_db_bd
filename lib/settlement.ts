@@ -28,6 +28,15 @@ export const SETTLEMENT_START_WEEK = "2026-10-19"
  */
 export const GROUP_KEY_ENV: Record<GroupId, string> = { ipsi: "SETTLEMENT_KEY_IPSI", dangwa: "SETTLEMENT_KEY_DANGWA" }
 
+/**
+ * 판매처 전용 아이디·비번(환경변수) — /settlement/{group} 로그인 화면에서 쓴다. 그 판매처 정산만 열리고
+ * 관리자 화면·접수 목록·다른 판매처 정산은 열리지 않는다. 비번은 저장소가 공개라 코드에 넣지 않는다.
+ */
+export const GROUP_LOGIN_ENV: Record<GroupId, { id: string; pw: string }> = {
+  ipsi: { id: "SETTLEMENT_IPSI_ID", pw: "SETTLEMENT_IPSI_PW" },
+  dangwa: { id: "SETTLEMENT_DANGWA_ID", pw: "SETTLEMENT_DANGWA_PW" },
+}
+
 /** 입시 사이트 — 카테고리 '미용입시' 이거나 아래 사이트명이면 입시 */
 export const IPSI_SITES = ["beautyip.kr", "beautyipsi.kr"]
 
